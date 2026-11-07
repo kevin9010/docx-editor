@@ -1,23 +1,44 @@
 name: Desktop Windows
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-windows.yml'
+      - '.nvmrc'
+      - '.npmrc'
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - 'shared/**'
+      - 'scripts/**'
+      - 'patches/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
   pull_request:
     paths:
       - '.github/workflows/desktop-windows.yml'
       - '.nvmrc'
+      - '.npmrc'
       - 'apps/desktop/**'
+      - 'packages/**'
+      - 'shared/**'
+      - 'scripts/**'
+      - 'patches/**'
       - 'package.json'
-      - 'packages/superdoc/**'
-      - 'packages/document-api/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-windows-${{ github.event.pull_request.number || github.run_id }}
+  group: desktop-windows-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -80,11 +101,16 @@ jobs:
       - name: Build portable ZIP
         run: pnpm --filter superdoc-desktop package:portable
 
+      - name: Verify Windows artifacts
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-windows-artifacts.ps1
+
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
         with:
           name: superdoc-desktop-windows-${{ github.sha }}
           if-no-files-found: error
           path: |
-            apps/desktop/src-tauri/target/release/bundle/**
-            artifacts/desktop/**
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+            artifacts/desktop/*-portable.zip
+            artifacts/desktop/*-portable.zip.sha256

@@ -27,6 +27,20 @@ pnpm package:desktop:portable
 
 The script builds the Tauri executable with `--no-bundle`, stages it with a version manifest and `PORTABLE-README.txt`, and writes a SHA-256 checksum under `artifacts/desktop/`. This is a small portable distribution, not a self-contained runtime: the Evergreen WebView2 Runtime must already be installed, and the executable does not download it. Use the regular Tauri installer when WebView2 installation is required. The current portable artifact is intentionally unsigned until a Windows Authenticode signing certificate is configured.
 
+## Windows CI artifacts
+
+The `Desktop Windows` GitHub Actions workflow validates and packages relevant pull requests and pushes to `main`. Its path filters include desktop sources, workspace packages, shared code, build scripts, and root build configuration. After the workflow is merged into the default branch, it can also be started from **Actions > Desktop Windows > Run workflow** with a selected branch.
+
+The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
+
+Download `superdoc-desktop-windows-<commit>` from the completed run's **Artifacts** section. It contains the `.msi`, `-setup.exe`, `-portable.zip`, and `.zip.sha256` deliverables. Extract the portable ZIP to run `SuperDoc-Desktop.exe`; the installers and portable build have the WebView2 and signing limitations described above.
+
+To repeat artifact verification locally after packaging, run from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-windows-artifacts.ps1
+```
+
 ## Opening documents
 
 Use **Open** to pick a `.docx` file with the system dialog, or drag a `.docx` file from Explorer onto the window. Both routes replace the current document and ask first when there are unsaved changes. The file is read on this machine; nothing leaves it until the Agent is used.
