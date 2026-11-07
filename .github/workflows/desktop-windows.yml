@@ -1,0 +1,85 @@
+name: Desktop Windows
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-windows.yml'
+      - '.nvmrc'
+      - 'apps/desktop/**'
+      - 'package.json'
+      - 'packages/superdoc/**'
+      - 'packages/document-api/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Desktop Windows validation
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SuperDoc
+        run: pnpm --filter superdoc build
+
+      - name: Typecheck desktop
+        run: pnpm --filter superdoc-desktop typecheck
+
+      - name: Test desktop
+        run: pnpm --filter superdoc-desktop test
+
+      - name: Lint desktop
+        run: pnpm exec vp lint apps/desktop
+
+      - name: Build desktop web assets
+        run: pnpm --filter superdoc-desktop build:web
+
+      - name: Check Rust formatting
+        run: cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: Run Rust clippy
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --all-targets --all-features -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+
+      - name: Build Windows installer
+        run: pnpm --filter superdoc-desktop tauri:build
+
+      - name: Build portable ZIP
+        run: pnpm --filter superdoc-desktop package:portable
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: superdoc-desktop-windows-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**
+            artifacts/desktop/**

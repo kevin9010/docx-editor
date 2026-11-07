@@ -1,0 +1,36 @@
+{
+  "name": "superdoc-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A lightweight Tauri desktop client for editing DOCX files with SuperDoc.",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "dev:web": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build:web": "pnpm --filter superdoc build && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 1420 --strictPort",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-portable.ps1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@superdoc/document-api": "workspace:*",
+    "superdoc": "workspace:*",
+    "vue": "catalog:",
+    "yjs": "catalog:"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}
