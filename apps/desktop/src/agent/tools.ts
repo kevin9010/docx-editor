@@ -1,5 +1,6 @@
 import type {
   AgentDocument,
+  AgentProposal,
   AgentToolContext,
   AgentToolDefinitions,
   AgentToolName,
@@ -10,15 +11,17 @@ import type { ChatCompletionMessageParam } from './wire-types';
 const MAX_TEXT_CHARS = 12_000;
 const MAX_MATCHES = 8;
 const MAX_TOOL_RESULT_CHARS = 20_000;
-const MAX_FIND_CHARS = 2_000;
-const MAX_MUTATION_TEXT_CHARS = 8_000;
+const MAX_FIND_CHARS = 12_000;
+const MAX_MUTATION_TEXT_CHARS = 16_000;
 
 export const AGENT_SYSTEM_PROMPT = [
   'You are the SuperDoc desktop document assistant.',
   '',
   'You may inspect the open Word document and propose precise edits.',
   'Before editing, inspect or search the document.',
-  'Every text mutation is applied as a tracked change so the user can review it in SuperDoc.',
+  'In review mode, superdoc_perform_action creates a proposed change; it does not modify the document.',
+  'The user chooses which suggestions to apply as tracked changes in SuperDoc.',
+  'Never claim a proposed change was applied. Explain what you suggest and why.',
   'Never claim an edit succeeded unless the tool receipt says status "applied" and the post-mutation revision changed.',
   'Search again after every mutation because search handles are revision-scoped.',
   'You cannot accept or reject tracked changes; leave that decision to the user.',
@@ -32,11 +35,12 @@ export const AGENT_TOOLS: AgentToolDefinitions = [
       name: 'superdoc_inspect',
       description:
         'Read a bounded document summary and optional full text excerpt. Use findText to locate exact text '
-        + 'before requesting a mutation.',
+        + 'before proposing an edit. Use textOffset to read subsequent excerpts.',
       parameters: {
         type: 'object',
         additionalProperties: false,
         properties: {
+          textOffset: { type: 'integer', minimum: 0, description: 'Start character for the next bounded text excerpt.' },
           includeText: {
             type: 'boolean',
             description: 'Include up to 12000 characters of document text.',
@@ -54,7 +58,7 @@ export const AGENT_TOOLS: AgentToolDefinitions = [
     function: {
       name: 'superdoc_perform_action',
       description:
-        'Apply one safe, reviewable tracked action to the open document. Search by literal text; '
+        'Propose one precise replacement or comment for user review. Search by literal text; '
         + 'never provide an opaque ref from an earlier turn.',
       parameters: {
         type: 'object',
@@ -129,16 +133,25 @@ async function inspectDocument(context: AgentToolContext, input: unknown): Promi
   const info = await context.document.info({});
   const result: AgentToolResult = {
     status: 'applied',
-    info,
+    info: context.review?.selection ? { revision: info.revision } : info,
   };
 
   if (options.includeText === true) {
-    const text = await context.document.getText({});
-    Object.assign(result, truncateText(text));
+    const text = context.review?.selection?.text ?? await context.document.getText({});
+    const offset = typeof options.textOffset === 'number' && Number.isSafeInteger(options.textOffset) && options.textOffset >= 0 ? options.textOffset : 0;
+    Object.assign(result, truncateText(text.slice(offset)));
+    result.textOffset = offset;
+    result.totalCharacters = text.length;
+    result.nextTextOffset = offset + MAX_TEXT_CHARS < text.length ? offset + MAX_TEXT_CHARS : null;
+    result.scope = context.review?.selection ? 'selection' : 'document';
   }
 
   const findText = stringField(input, 'findText', MAX_FIND_CHARS);
   if (findText) {
+    if (context.review?.selection) {
+      result.matches = context.review.selection.text.includes(findText) ? [{ snippet: context.review.selection.text }] : [];
+      return result;
+    }
     const matches = await context.document.query.match({
       select: { type: 'text', pattern: findText, mode: 'contains', caseSensitive: true },
       require: 'all',
@@ -185,6 +198,31 @@ async function performAction(
   if (!action || !find) return { status: 'invalid', message: 'action and find are required.' };
   if (action !== 'replace_text' && action !== 'add_comment') {
     return { status: 'invalid', message: `Unsupported action: ${action}.` };
+  }
+
+  if (context.review) {
+    const review = context.review;
+    if (context.signal?.aborted) return { status: 'aborted' };
+    const info = await context.document.info({});
+    if (info.revision !== review.revision) return { status: 'failed', message: 'The document changed. Ask the user to start a new review.' };
+    if (review.selection && find !== review.selection.text) return { status: 'invalid', message: 'For selection scope, find must be the complete captured selection.' };
+    const replacement = asRecord(input).replacement;
+    const comment = stringField(input, 'comment');
+    if (action === 'replace_text' && (typeof replacement !== 'string' || replacement.length > MAX_MUTATION_TEXT_CHARS)) return { status: 'invalid', message: 'A bounded replacement string is required.' };
+    if (action === 'add_comment' && !comment) return { status: 'invalid', message: 'Comment text is required.' };
+    if (action === 'replace_text' && replacement === find) return { status: 'invalid', message: 'The suggested text is identical to the original.' };
+    if (review.proposals.length >= 16) return { status: 'invalid', message: 'Review the current suggestions before generating more.' };
+    if (!review.selection) {
+      const matches = await context.document.query.match({ select: { type: 'text', pattern: find, mode: 'contains', caseSensitive: true }, require: 'all', limit: 2 });
+      if (matches.items.length !== 1) return { status: 'no_match', message: 'Use a longer, unique original passage, or ask the user to select it.' };
+    }
+    if (context.signal?.aborted) return { status: 'aborted' };
+    const existing = review.proposals.find((proposal) => proposal.action === action && proposal.find === find && proposal.replacement === replacement && proposal.comment === (comment ?? undefined));
+    if (existing) return { status: 'proposed', proposalId: existing.id, message: 'This suggestion already awaits review.' };
+    const proposal: AgentProposal = { id: crypto.randomUUID(), action, find, ...(typeof replacement === 'string' ? { replacement } : {}), ...(comment ? { comment } : {}), state: 'pending' };
+    review.proposals.push(proposal);
+    review.onProposal?.(proposal);
+    return { status: 'proposed', proposalId: proposal.id, message: 'Suggestion queued for user review. The document has not changed.' };
   }
 
   const matchResult = await findFirstMatch(context.document, find);

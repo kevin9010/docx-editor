@@ -175,6 +175,7 @@ textarea:focus {
   display: flex;
   flex: 1;
   min-height: 0;
+  background: #e2e8f0;
 }
 
 .editor-pane {
@@ -186,6 +187,9 @@ textarea:focus {
 }
 
 .editor-toolbar {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
   min-height: 45px;
   border-bottom: 1px solid #cbd5e1;
   background: #f8fafc;
@@ -271,9 +275,13 @@ textarea:focus {
   display: flex;
   position: relative;
   flex-direction: column;
-  width: 340px;
-  min-width: 340px;
-  border-left: 1px solid #1e293b;
+  width: 360px;
+  min-width: 360px;
+  min-height: 0;
+  margin: 16px 16px 16px 0;
+  border: 1px solid #334155;
+  border-radius: 22px;
+  box-shadow: 0 12px 30px rgb(15 23 42 / 18%);
   background: #111827;
 }
 
@@ -304,8 +312,17 @@ textarea:focus {
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  padding: 26px 18px 18px;
+  padding: 26px 20px 20px;
   overflow: auto;
+  border-radius: inherit;
+}
+
+.agent-content > * {
+  flex-shrink: 0;
+}
+
+.agent-content textarea {
+  min-height: 80px;
 }
 
 .agent-title {
@@ -349,7 +366,7 @@ textarea:focus {
 
 .field-label {
   display: block;
-  margin-bottom: -9px;
+  margin-bottom: -6px;
   color: #cbd5e1;
   font-size: 11px;
   font-weight: 600;
@@ -364,7 +381,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-top: 2px;
+  padding-top: 14px;
 }
 
 .agent-controls {
@@ -405,7 +422,39 @@ textarea:focus {
 
 .agent-summary {
   color: #cbd5e1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
+
+.agent-pane select {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #0f172a;
+  color: #e5e7eb;
+  font: inherit;
+  font-size: 12px;
+}
+
+.agent-pane input, .agent-pane textarea, .agent-pane button { border-radius: 10px; }
+.connection-settings { color: #94a3b8; font-size: 12px; }
+.connection-settings summary { cursor: pointer; }
+.connection-path { overflow-wrap: anywhere; }
+.writing-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.writing-actions button { padding: 6px 10px; border-radius: 999px; font-size: 11px; }
+.writing-actions button[aria-pressed='true'] { background: #1e3a5f; border-color: #60a5fa; color: #bfdbfe; }
+.selection-preview { max-height: 90px; overflow: auto; margin: 0; padding: 10px; border-left: 3px solid #60a5fa; color: #cbd5e1; font-size: 12px; white-space: pre-wrap; }
+.suggestions { display: grid; gap: 12px; }
+.suggestions h3 { font-size: 13px; margin: 0; }
+.suggestion { border: 1px solid #334155; border-radius: 14px; padding: 12px; background: #0f172a; }
+.suggestion label { display: block; margin-top: 10px; color: #94a3b8; font-size: 10px; }
+.suggestion p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; font-size: 12px; line-height: 1.5; }
+.suggestion .original-text { color: #fca5a5; }
+.suggestion .replacement-text { color: #a7f3d0; }
+.suggestion-actions { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.suggestion[data-state='dismissed'] { opacity: 0.6; }
+.suggestion[data-state='applied'] { border-color: #047857; }
 
 .agent-summary small {
   color: #64748b;

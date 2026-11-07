@@ -15,8 +15,8 @@ import {
   writeDocumentToPath,
   type OpenedDocument,
 } from './document/document-session';
-import { runDocumentAgent } from './agent/loop';
-import type { AgentRunResult } from './agent/types';
+import AgentPanel from './AgentPanel.vue';
+import type { AgentSelection } from './agent/types';
 
 const editorHost = ref<HTMLElement | null>(null);
 const toolbarHost = ref<HTMLElement | null>(null);
@@ -31,19 +31,14 @@ const isDirty = ref(false);
 const autoSaveEnabled = ref(true);
 const showAgent = ref(true);
 const isDragActive = ref(false);
-const agentPrompt = ref('');
-const agentRunning = ref(false);
-const agentStatus = ref('');
-const agentSummary = ref('');
-const agentError = ref('');
-const lastAgentResult = ref<AgentRunResult | null>(null);
-const baseUrl = ref(localStorage.getItem('superdoc.desktop.baseUrl') ?? 'https://api.openai.com/v1');
-const model = ref(localStorage.getItem('superdoc.desktop.model') ?? 'gpt-4o-mini');
-const apiKey = ref('');
+const agentBusy = ref(false);
+const liveDocument = shallowRef<BrowserDocumentApi | null>(null);
+const selection = shallowRef<AgentSelection | null>(null);
+let unlistenSelection: (() => void) | null = null;
+let selectionGeneration = 0;
 
 let autoSaveTimer: number | null = null;
 let metadataTimer: number | null = null;
-let agentAbortController: AbortController | null = null;
 let unlistenDragDrop: (() => void) | null = null;
 let initializing = false;
 let suppressAutoSave = false;
@@ -51,8 +46,7 @@ let mountGeneration = 0;
 let lastDiskModifiedAt = 0;
 
 const fileName = computed(() => openedDocument.value?.name ?? 'No document');
-const canSave = computed(() => Boolean(editor.value && openedDocument.value && !isSaving.value));
-const canRunAgent = computed(() => Boolean(getLiveDocument() && agentPrompt.value.trim() && !agentRunning.value));
+const canSave = computed(() => Boolean(editor.value && openedDocument.value && !isSaving.value && !agentBusy.value));
 
 function clearError(): void {
   errorMessage.value = '';
@@ -67,6 +61,7 @@ function messageFromError(error: unknown): string {
 const docxNamePattern = /\.docx$/i;
 
 function confirmDiscardChanges(action: string): boolean {
+  if (agentBusy.value || isSaving.value || isLoading.value) return false;
   if (!isDirty.value) return true;
   return window.confirm(`Discard unsaved changes and ${action}?`);
 }
@@ -92,6 +87,14 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
   if (!editorHost.value || !toolbarHost.value) throw new Error('The editor surface is not mounted.');
 
   const generation = ++mountGeneration;
+  if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+  suppressAutoSave = false;
+  unlistenSelection?.();
+  unlistenSelection = null;
+  selectionGeneration += 1;
+  selection.value = null;
+  liveDocument.value = null;
   editor.value?.destroy?.();
   editor.value = null;
   editorHost.value.replaceChildren();
@@ -106,7 +109,7 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
     ui: {
       toolbar: {
         container: toolbarHost.value,
-        // The Agent shares the window; only the editor column is available.
+        // Adapt to the toolbar host, including window resizes.
         responsiveTo: 'container',
         overflow: 'menu',
       },
@@ -123,10 +126,23 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
       initializing = false;
       status.value = `Ready — ${document.name}`;
       isDirty.value = false;
+      liveDocument.value = getLiveDocument();
+      unlistenSelection = editor.value?.ui.selection.subscribe(({ snapshot }) => {
+        if (snapshot.status !== 'ready' || snapshot.empty || !snapshot.selectionTarget || !snapshot.quotedText) return;
+        const capture = ++selectionGeneration;
+        const target = JSON.parse(JSON.stringify(snapshot.selectionTarget));
+        const text = snapshot.quotedText;
+        void Promise.resolve(liveDocument.value?.info({})).then((info) => {
+          if (!info || capture !== selectionGeneration || generation !== mountGeneration) return;
+          selection.value = { target, text, revision: info.revision };
+        }).catch(() => {});
+      }) ?? null;
       void refreshDiskMetadata();
     },
     onEditorUpdate: () => {
       if (generation !== mountGeneration || initializing) return;
+      selectionGeneration += 1;
+      selection.value = null;
       isDirty.value = true;
       status.value = `Unsaved changes — ${document.name}`;
       if (!suppressAutoSave) scheduleAutoSave();
@@ -180,6 +196,7 @@ async function openDocument(): Promise<void> {
 }
 
 function openBrowserPicker(): void {
+  if (agentBusy.value || isLoading.value || isSaving.value) return;
   browserFileInput.value?.click();
 }
 
@@ -187,7 +204,7 @@ async function handleBrowserFile(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
-  if (!file) return;
+  if (!file || !confirmDiscardChanges('open another document')) return;
   isLoading.value = true;
   clearError();
   try {
@@ -294,6 +311,7 @@ async function saveDocument(): Promise<void> {
     if (!isTauriRuntime()) {
       downloadDocument(bytes);
       isDirty.value = false;
+      suppressAutoSave = false;
       status.value = 'Downloaded edited DOCX (browser preview).';
       return;
     }
@@ -314,6 +332,7 @@ async function saveDocument(): Promise<void> {
         data: bytes,
       };
       isDirty.value = false;
+      suppressAutoSave = false;
       status.value = `Saved ${fileName.value}`;
       await refreshDiskMetadata();
     }
@@ -326,7 +345,7 @@ async function saveDocument(): Promise<void> {
 }
 
 async function saveAs(): Promise<void> {
-  if (!editor.value) return;
+  if (!editor.value || agentBusy.value || isSaving.value) return;
   isSaving.value = true;
   clearError();
   try {
@@ -334,6 +353,7 @@ async function saveAs(): Promise<void> {
     if (!isTauriRuntime()) {
       downloadDocument(bytes);
       isDirty.value = false;
+      suppressAutoSave = false;
       status.value = 'Downloaded edited DOCX (browser preview).';
       return;
     }
@@ -342,6 +362,7 @@ async function saveAs(): Promise<void> {
     await writeDocumentToPath(path, bytes);
     openedDocument.value = { path, name: fileNameFromPath(path), data: bytes };
     isDirty.value = false;
+    suppressAutoSave = false;
     status.value = `Saved ${fileName.value}`;
     await refreshDiskMetadata();
   } catch (error) {
@@ -354,7 +375,7 @@ async function saveAs(): Promise<void> {
 
 async function reloadFromDisk(): Promise<void> {
   const path = openedDocument.value?.path;
-  if (!path) return;
+  if (!path || agentBusy.value || isLoading.value || isSaving.value) return;
   if (isDirty.value && !window.confirm('Reload the file from disk and discard unsaved changes?')) return;
   isLoading.value = true;
   clearError();
@@ -374,7 +395,7 @@ function scheduleAutoSave(): void {
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
-    void saveDocument();
+    if (!suppressAutoSave && autoSaveEnabled.value) void saveDocument();
   }, 1200);
 }
 
@@ -390,56 +411,15 @@ async function pollDiskChanges(): Promise<void> {
   }
 }
 
-function persistNonSecretSettings(): void {
-  localStorage.setItem('superdoc.desktop.baseUrl', baseUrl.value.trim());
-  localStorage.setItem('superdoc.desktop.model', model.value.trim());
-}
-
-async function runAgent(): Promise<void> {
-  const document = getLiveDocument();
-  if (!document || !agentPrompt.value.trim()) return;
-  if (!apiKey.value.trim()) {
-    agentError.value = 'Enter an API key for this session. It is not persisted by the app.';
-    return;
-  }
-
-  persistNonSecretSettings();
-  agentRunning.value = true;
-  agentError.value = '';
-  agentSummary.value = '';
-  lastAgentResult.value = null;
-  agentAbortController = new AbortController();
+function prepareAgentApply(): void {
   suppressAutoSave = true;
-  try {
-    const result = await runDocumentAgent({
-      document,
-      prompt: agentPrompt.value.trim(),
-      baseUrl: baseUrl.value,
-      model: model.value,
-      apiKey: apiKey.value,
-      signal: agentAbortController.signal,
-      onStatus: (nextStatus) => {
-        agentStatus.value = nextStatus;
-      },
-    });
-    lastAgentResult.value = result;
-    agentSummary.value = result.summary;
-    if (result.mutated) {
-      isDirty.value = true;
-      status.value = 'Agent changes are ready for review; they were not auto-saved.';
-    }
-  } catch (error) {
-    agentError.value = messageFromError(error);
-  } finally {
-    suppressAutoSave = false;
-    agentRunning.value = false;
-    agentAbortController = null;
-  }
+  if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
 }
 
-function cancelAgent(): void {
-  agentAbortController?.abort();
-  agentStatus.value = 'Cancelling…';
+function agentApplied(): void {
+  isDirty.value = true;
+  status.value = 'Agent revisions are ready for review. Auto-save is paused until you save.';
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -467,7 +447,8 @@ onBeforeUnmount(() => {
   unlistenDragDrop = null;
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   if (metadataTimer !== null) window.clearInterval(metadataTimer);
-  agentAbortController?.abort();
+  unlistenSelection?.();
+  selectionGeneration += 1;
   mountGeneration += 1;
   editor.value?.destroy?.();
 });
@@ -484,20 +465,21 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="document-actions">
-        <button :disabled="isLoading" @click="isTauriRuntime() ? openDocument() : openBrowserPicker()">Open</button>
+        <button :disabled="isLoading || isSaving || agentBusy" @click="isTauriRuntime() ? openDocument() : openBrowserPicker()">Open</button>
         <button :disabled="!canSave" class="primary" @click="saveDocument">Save</button>
-        <button :disabled="!editor || isSaving" @click="saveAs">Save As</button>
-        <button :disabled="!openedDocument?.path || isLoading" @click="reloadFromDisk">Reload</button>
+        <button :disabled="!editor || isSaving || agentBusy" @click="saveAs">Save As</button>
+        <button :disabled="!openedDocument?.path || isLoading || isSaving || agentBusy" @click="reloadFromDisk">Reload</button>
       </div>
       <div class="header-status" :class="{ dirty: isDirty }">
         <span class="status-dot" />
+        <label class="autosave-toggle"><input v-model="autoSaveEnabled" type="checkbox" /> Auto-save</label>
         {{ isDirty ? 'Unsaved' : 'Saved' }}
       </div>
     </header>
 
+    <div ref="toolbarHost" class="editor-toolbar" />
     <section class="workspace">
       <section class="editor-pane">
-        <div ref="toolbarHost" class="editor-toolbar" />
         <!--
           SuperDoc mounts its own Vue app into `editorHost` and `mountDocument`
           clears the element before every mount. Nothing here may be owned by
@@ -522,44 +504,7 @@ onBeforeUnmount(() => {
         <button class="agent-toggle" @click="showAgent = !showAgent">
           {{ showAgent ? 'Hide Agent' : 'Show Agent' }}
         </button>
-        <div v-if="showAgent" class="agent-content">
-          <div class="agent-title">
-            <div>
-              <span class="eyebrow">CONTEXTUAL EDITING</span>
-              <h2>Document Agent</h2>
-            </div>
-            <span class="local-badge">Tracked</span>
-          </div>
-          <p class="agent-description">
-            Ask the Agent to inspect the open document or propose a precise edit. Changes remain tracked for your review.
-          </p>
-          <label class="field-label" for="agent-prompt">Instruction</label>
-          <textarea id="agent-prompt" v-model="agentPrompt" rows="5" placeholder="E.g. Change every payment term from 60 to 30 days." />
-          <div class="agent-settings">
-            <label class="field-label" for="base-url">Base URL</label>
-            <input id="base-url" v-model="baseUrl" autocomplete="off" @change="persistNonSecretSettings" />
-            <label class="field-label" for="model">Model</label>
-            <input id="model" v-model="model" autocomplete="off" @change="persistNonSecretSettings" />
-            <label class="field-label" for="api-key">API key <span>(session only)</span></label>
-            <input id="api-key" v-model="apiKey" type="password" autocomplete="off" placeholder="Not stored by the app" />
-          </div>
-          <div class="agent-controls">
-            <button v-if="!agentRunning" class="primary" :disabled="!canRunAgent" @click="runAgent">Run Agent</button>
-            <button v-else @click="cancelAgent">Stop</button>
-            <label class="autosave-toggle">
-              <input v-model="autoSaveEnabled" type="checkbox" />
-              Auto-save local edits
-            </label>
-          </div>
-          <div v-if="agentRunning || agentStatus" class="agent-status">{{ agentStatus }}</div>
-          <div v-if="agentSummary" class="agent-summary">
-            <span class="eyebrow">RESULT</span>
-            <p>{{ agentSummary }}</p>
-            <small v-if="lastAgentResult">{{ lastAgentResult.turns }} turn(s) · {{ lastAgentResult.status }}</small>
-          </div>
-          <div v-if="agentError" class="agent-error">{{ agentError }}</div>
-          <p class="privacy-note">The document context is sent to the Base URL you configure. The API key is kept only in this session.</p>
-        </div>
+        <AgentPanel v-show="showAgent" :document="liveDocument" :selection="selection" :disabled="isLoading || isSaving" @busy="agentBusy = $event" @applying="prepareAgentApply" @applied="agentApplied" />
       </aside>
     </section>
 

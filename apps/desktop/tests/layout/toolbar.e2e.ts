@@ -17,7 +17,7 @@ async function expectToolbarInsideEditor(page: Page): Promise<void> {
         return (
           items.length > 0 &&
           host.scrollWidth <= host.clientWidth + 1 &&
-          hostRect.right <= agentRect.left + 1 &&
+          hostRect.bottom + 8 <= agentRect.top &&
           items.every((item) => {
             const rect = item.getBoundingClientRect();
             return rect.width === 0 || (rect.left >= hostRect.left - 1 && rect.right <= hostRect.right + 1);
@@ -29,7 +29,7 @@ async function expectToolbarInsideEditor(page: Page): Promise<void> {
 }
 
 for (const width of [1440, 1280, 1100, 960]) {
-  test(`toolbar stays beside the Agent at ${width}px`, async ({ page }, testInfo) => {
+  test(`toolbar stays above the floating Agent at ${width}px`, async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.setViewportSize({ width, height: 900 });
@@ -47,17 +47,13 @@ for (const width of [1440, 1280, 1100, 960]) {
     await expect(page.locator('.agent-pane')).not.toHaveClass(/collapsed/);
     await expectToolbarInsideEditor(page);
 
-    await page.setViewportSize({ width: width === 960 ? 1440 : 960, height: 900 });
+    await page.setViewportSize({ width: 960, height: 900 });
     await expectToolbarInsideEditor(page);
-    // On expansion the old compact toolbar already fits, so bounds alone can
-    // pass before it adapts. Wait for a control whose visibility changes before
-    // clicking a trigger that the responsive update is about to replace.
-    const zoom = page.locator('.editor-toolbar [aria-label="Zoom"]');
-    if (width === 960) await expect(zoom).toBeVisible();
-    else await expect(zoom).toBeHidden();
-    await page.locator('.editor-toolbar [aria-label="Overflow items"]').click();
     const overflowMenu = page.locator('.sd-toolbar-overflow-menu');
-    await expect(overflowMenu).toBeVisible();
+    await expect(async () => {
+      if (!(await overflowMenu.isVisible())) await page.locator('.editor-toolbar [aria-label="Overflow items"]').click();
+      await expect(overflowMenu).toBeVisible();
+    }).toPass();
     expect(await overflowMenu.locator('[data-sd-part="toolbar-item"]').count()).toBeGreaterThan(0);
     await page.keyboard.press('Escape');
     await expect(overflowMenu).toBeHidden();

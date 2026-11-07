@@ -87,7 +87,7 @@ describe('document Agent tools', () => {
     const result = await dispatchAgentTool(
       { document },
       'superdoc_perform_action',
-      { action: 'replace_text', find: 'x'.repeat(2_001), replacement: 'new text' },
+      { action: 'replace_text', find: 'x'.repeat(12_001), replacement: 'new text' },
     );
     expect(result.status).toBe('invalid');
     expect(document.query.match).not.toHaveBeenCalled();

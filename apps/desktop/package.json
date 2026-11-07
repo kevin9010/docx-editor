@@ -18,9 +18,9 @@
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-portable.ps1"
   },
   "dependencies": {
+    "@superdoc/document-api": "workspace:*",
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
-    "@superdoc/document-api": "workspace:*",
     "superdoc": "workspace:*",
     "vue": "catalog:",
     "yjs": "catalog:"
@@ -30,6 +30,7 @@
     "@tauri-apps/cli": "^2.9.0",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "jszip": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",

@@ -1,5 +1,6 @@
 import type { BrowserDocumentApi } from 'superdoc';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from './wire-types';
+import type { SelectionTarget } from '@superdoc/document-api';
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -23,7 +24,7 @@ export interface AgentAssistantMessage {
 }
 
 export interface AgentToolResult {
-  status: 'applied' | 'failed' | 'no_match' | 'invalid' | 'aborted';
+  status: 'applied' | 'proposed' | 'failed' | 'no_match' | 'invalid' | 'aborted';
   message?: string;
   [key: string]: unknown;
 }
@@ -37,6 +38,8 @@ export interface AgentRunOptions {
   maxTurns?: number;
   signal?: AbortSignal;
   onStatus?: (status: string) => void;
+  onText?: (text: string) => void;
+  review?: AgentReviewSession;
 }
 
 export interface AgentRunResult {
@@ -49,6 +52,31 @@ export interface AgentRunResult {
 export interface AgentToolContext {
   document: AgentDocument;
   signal?: AbortSignal;
+  review?: AgentReviewSession;
+}
+
+export interface AgentSelection {
+  text: string;
+  target: SelectionTarget;
+  revision: string;
+}
+
+export interface AgentProposal {
+  id: string;
+  action: 'replace_text' | 'add_comment';
+  find: string;
+  replacement?: string;
+  comment?: string;
+  state: 'pending' | 'applying' | 'applied' | 'dismissed' | 'failed';
+  error?: string;
+}
+
+export interface AgentReviewSession {
+  revision: string;
+  selection?: AgentSelection;
+  selectionReplaced?: boolean;
+  proposals: AgentProposal[];
+  onProposal?: (proposal: AgentProposal) => void;
 }
 
 export type AgentToolDefinitions = ChatCompletionTool[];

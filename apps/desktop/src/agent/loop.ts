@@ -1,4 +1,5 @@
 import { requestChatCompletion } from './endpoint';
+import { withAbort } from './cancellation';
 import { dispatchAgentTool, AGENT_SYSTEM_PROMPT, AGENT_TOOLS, toolResultMessage } from './tools';
 import type { AgentAssistantMessage, AgentMessages, AgentRunOptions, AgentRunResult } from './types';
 
@@ -29,15 +30,15 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
 
     let response: Awaited<ReturnType<typeof requestChatCompletion>>;
     try {
-      response = await requestChatCompletion({
+      response = await withAbort(requestChatCompletion({
         baseUrl: options.baseUrl,
         apiKey: options.apiKey,
         model: options.model,
         messages,
         tools: AGENT_TOOLS,
         temperature: 0.1,
-        maxTokens: 1200,
-      });
+        maxTokens: 6000,
+      }), options.signal);
     } catch (error) {
       return {
         status: options.signal?.aborted ? 'aborted' : 'failed',
@@ -46,10 +47,12 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
         mutated,
       };
     }
+    if (options.signal?.aborted) return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn, mutated };
     const message = response.choices[0]?.message;
     if (!message) throw new Error('The model response did not contain a message.');
 
     messages.push(assistantMessage(message));
+    if (message.content) options.onText?.(message.content);
     const calls = message.tool_calls ?? [];
     if (calls.length === 0) {
       return {
@@ -85,7 +88,7 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
       let result;
       try {
         result = await dispatchAgentTool(
-          { document: options.document, signal: options.signal },
+          { document: options.document, signal: options.signal, review: options.review },
           call.function.name,
           parsedInput,
         );

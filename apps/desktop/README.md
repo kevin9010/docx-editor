@@ -31,7 +31,7 @@ The script builds the Tauri executable with `--no-bundle`, stages it with a vers
 
 The `Desktop Windows` GitHub Actions workflow validates and packages relevant pull requests and pushes to `main`. Its path filters include desktop sources, workspace packages, shared code, build scripts, and root build configuration. After the workflow is merged into the default branch, it can also be started from **Actions > Desktop Windows > Run workflow** with a selected branch.
 
-The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. A browser layout check opens a DOCX at four window widths and verifies that toolbar controls stay inside the editor while the Agent is toggled and the window resized. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
+The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. A browser layout check opens a DOCX at four window widths and verifies that toolbar controls fit their host above the floating Agent while it is toggled and the window resized. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
 
 Download `superdoc-desktop-windows-<commit>` from the completed run's **Artifacts** section. It contains the `.msi`, `-setup.exe`, `-portable.zip`, and `.zip.sha256` deliverables. Extract the portable ZIP to run `SuperDoc-Desktop.exe`; the installers and portable build have the WebView2 and signing limitations described above.
 
@@ -45,13 +45,47 @@ powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-
 
 Use **Open** to pick a `.docx` file with the system dialog, or drag a `.docx` file from Explorer onto the window. Both routes replace the current document and ask first when there are unsaved changes. The file is read on this machine; nothing leaves it until the Agent is used.
 
-## Agent behavior
+## Writing and reviewing
 
-The Agent operates on the currently visible SuperDoc instance through its browser Document API. It can inspect bounded document text, replace matching text as a tracked change, and add comments. It cannot accept or reject tracked changes. Agent edits are not automatically saved; the user reviews them in the editor and chooses Save.
+The full-width SuperDoc toolbar stays above the editor and Agent. The Agent is a rounded card below the toolbar with its own scroll area; hiding it returns that space to the document.
 
-Model requests are sent by the Rust Tauri command to the configured OpenAI-compatible Chat Completions endpoint. `baseUrl` and model name are stored as non-secret convenience settings. The API key is kept in memory for the current window only and is not written to local storage or application logs. The document context is sent to the endpoint selected by the user.
+Choose **Revise**, **Polish**, **Proofread**, **Academic**, **Translate**, **Summarize**, or **Custom**. Select a passage in SuperDoc to work on that passage, or choose **Whole document**. The captured selection survives moving focus to the Agent. Translation requires a target language. Summarize returns a response without requesting a rewrite.
 
-Codex CLI, Claude CLI, MCP, and the headless SuperDoc SDK are intentionally not required to launch the desktop application. They can be added as optional developer backends later without duplicating the live editor document state.
+**Generate suggestions** reads document context and creates previews of the original and suggested text. Nothing is written by the model. **Apply as revision** creates a tracked replacement; **Add comment** creates a review comment. Use SuperDoc's own review controls to accept or reject changes. **Dismiss** leaves the document unchanged. Starting another run replaces the previous suggestion list.
+
+The app rejects stale document revisions and ambiguous whole-document matches. Selected-passage edits use the captured range, even if the same text occurs elsewhere. It limits a selected passage to 12,000 characters and a run to 16 suggestions; whole-document inspection is paginated. Applied Agent changes pause auto-save until the user explicitly saves. Document replacement and saving are disabled during an Agent run or application.
+
+### Local Codex CLI (default)
+
+The app starts the already-installed `codex app-server --listen stdio://` and reuses its authentication and model configuration. It does not download or bundle Codex or read API keys from Codex's credential files. **Connection settings > Check connection** reports availability and loads the model list; **CLI default** preserves the CLI's configured model. If PATH discovery fails, specify an absolute installed `codex.exe` or npm `codex.cmd` path. npm shims are resolved to their native executable without invoking a shell. If signed out, run `codex login` separately and reconnect.
+
+The bridge uses the [official Codex app-server protocol](https://developers.openai.com/codex/app-server). Dynamic document tools require an app-server version supporting `dynamicTools`, `item/tool/call`, and `environments: []`; the local integration test was validated with Codex 0.167.0. This API is experimental. Older incompatible CLIs report connection/run errors; Base URL remains available.
+
+Each run uses an ephemeral thread, an isolated working directory, no execution environments, and the supplied document tools. The bridge restricts client RPC methods, disables web search/apps, and never approves other server requests. The child process stops on completion, cancellation, disconnect, or app exit. Codex's configured model provider receives the requested document context; running the CLI locally does not mean inference is offline.
+
+### Base URL
+
+Select **Base URL** for an OpenAI-compatible Chat Completions endpoint supporting tool calls. Set its URL, model, and session-only API key under **Connection settings**. URL/model/provider preferences are saved locally; the key is kept in memory and never saved to local storage. Model requests use the native Rust gateway. Stop immediately ignores late results; an already-sent HTTP request may finish at the provider.
+
+Both providers use the same document tools and suggestion review workflow. Neither provider can accept/reject revisions or save the file. The browser preview can edit documents but cannot launch Codex or use the native model gateway.
+
+### Agent validation
+
+From the repository root:
+
+```powershell
+pnpm --filter superdoc-desktop typecheck
+pnpm --filter superdoc-desktop test
+pnpm --filter superdoc-desktop build:web
+pnpm --filter superdoc-desktop test:layout
+```
+
+The deterministic suite tests proposal-only generation, exact selection targeting, ambiguous matches, revision checks, sequential approvals, cancellation, and Codex RPC lifecycle. Browser tests open real DOCX files, check layout at four widths, preserve a selection across focus changes, and exercise preview/application/export through a mocked gateway. CI does not require model credentials. To also exercise a real installed CLI using synthetic text only:
+
+```powershell
+$env:SUPERDOC_TEST_CODEX = 'C:/absolute/path/to/codex.exe'
+pnpm --filter superdoc-desktop exec vitest run src/agent/codex-live.test.ts
+```
 
 ## Scope and release notes
 
