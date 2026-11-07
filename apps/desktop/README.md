@@ -27,6 +27,10 @@ pnpm package:desktop:portable
 
 The script builds the Tauri executable with `--no-bundle`, stages it with a version manifest and `PORTABLE-README.txt`, and writes a SHA-256 checksum under `artifacts/desktop/`. This is a small portable distribution, not a self-contained runtime: the Evergreen WebView2 Runtime must already be installed, and the executable does not download it. Use the regular Tauri installer when WebView2 installation is required. The current portable artifact is intentionally unsigned until a Windows Authenticode signing certificate is configured.
 
+## Opening documents
+
+Use **Open** to pick a `.docx` file with the system dialog, or drag a `.docx` file from Explorer onto the window. Both routes replace the current document and ask first when there are unsaved changes. The file is read on this machine; nothing leaves it until the Agent is used.
+
 ## Agent behavior
 
 The Agent operates on the currently visible SuperDoc instance through its browser Document API. It can inspect bounded document text, replace matching text as a tracked change, and add comments. It cannot accept or reject tracked changes. Agent edits are not automatically saved; the user reviews them in the editor and chooses Save.
