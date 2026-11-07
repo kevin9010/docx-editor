@@ -31,7 +31,7 @@ pub struct DocumentFileMetadata {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatCompletionRequest {
+pub struct ChatCompletionRequest {
     base_url: String,
     api_key: String,
     model: String,
