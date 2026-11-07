@@ -403,7 +403,14 @@ onBeforeUnmount(() => {
     <section class="workspace">
       <section class="editor-pane">
         <div ref="toolbarHost" class="editor-toolbar" />
-        <div ref="editorHost" class="editor-host">
+        <!--
+          SuperDoc mounts its own Vue app into `editorHost` and `mountDocument`
+          clears the element before every mount. Nothing here may be owned by
+          this template's render function: wiping Vue's children behind its back
+          leaves stale vnodes and every later render throws.
+        -->
+        <div class="editor-area">
+          <div ref="editorHost" class="editor-host" />
           <div v-if="!editor" class="empty-editor">
             <strong>Open a Word document</strong>
             <span>DOCX files stay local until you explicitly use the Agent or save them.</span>
