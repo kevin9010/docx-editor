@@ -98,9 +98,13 @@ $manifest = [ordered]@{
   }
   signed = $false
 }
-$manifest | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $stagingPath 'portable-manifest.json') -Encoding utf8
+# Write both text files as UTF-8 without a byte order mark. Windows PowerShell 5.1's
+# `-Encoding utf8` prefixes a BOM, which strict JSON parsers reject and which shows up
+# as a stray character in editors that do not strip it.
+$utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+[System.IO.File]::WriteAllText((Join-Path $stagingPath 'portable-manifest.json'), ($manifest | ConvertTo-Json -Depth 5), $utf8NoBom)
 
-@"
+$readme = @"
 SuperDoc Desktop $version - Windows portable build
 
 This ZIP contains the Tauri executable only. It is not a signed Windows release.
@@ -113,7 +117,8 @@ Prerequisite:
 The application reads and writes DOCX files selected by the user. Keep the
 executable in a writable directory if future crash-recovery files are enabled.
 See DESKTOP-README.md for the current POC scope and Agent privacy behavior.
-"@ | Set-Content (Join-Path $stagingPath 'PORTABLE-README.txt') -Encoding utf8
+"@
+[System.IO.File]::WriteAllText((Join-Path $stagingPath 'PORTABLE-README.txt'), $readme, $utf8NoBom)
 
 Compress-Archive -Path (Join-Path $stagingPath '*') -DestinationPath $zipPath -CompressionLevel Optimal
 # Hash through the .NET API rather than Get-FileHash: that cmdlet lives in the
