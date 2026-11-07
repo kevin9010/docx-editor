@@ -116,7 +116,22 @@ See DESKTOP-README.md for the current POC scope and Agent privacy behavior.
 "@ | Set-Content (Join-Path $stagingPath 'PORTABLE-README.txt') -Encoding utf8
 
 Compress-Archive -Path (Join-Path $stagingPath '*') -DestinationPath $zipPath -CompressionLevel Optimal
-$hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+# Hash through the .NET API rather than Get-FileHash: that cmdlet lives in the
+# Microsoft.PowerShell.Utility module, which fails to auto-load when this script
+# is started from PowerShell 7 (as `pnpm run` does under GitHub Actions) because
+# pwsh hands the child Windows PowerShell 5.1 a PSModulePath containing only 7's
+# module directories. The .NET call needs no module on either version.
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+try {
+  $zipStream = [System.IO.File]::OpenRead($zipPath)
+  try {
+    $hash = ([System.BitConverter]::ToString($sha256.ComputeHash($zipStream)) -replace '-', '').ToLowerInvariant()
+  } finally {
+    $zipStream.Dispose()
+  }
+} finally {
+  $sha256.Dispose()
+}
 "$hash *$([IO.Path]::GetFileName($zipPath))" | Set-Content $checksumPath -Encoding ascii
 
 Write-Output "Portable package: $zipPath"
