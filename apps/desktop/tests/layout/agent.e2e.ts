@@ -19,10 +19,13 @@ async function mockBaseUrl(page: Page): Promise<void> {
     Object.assign(window, { __TAURI_INTERNALS__: {
       transformCallback: () => 1, unregisterCallback: () => {},
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
-      invoke: async (command: string) => {
+      invoke: async (command: string, args?: { request?: { messages?: Array<{ role: string; content: string }> } }) => {
         if (command !== 'chat_completion') return 1;
+        const inspection = args?.request?.messages?.find((message) => message.role === 'tool');
+        const inspected = inspection ? JSON.parse(inspection.content) : null;
+        const find = inspected?.scope === 'selection' ? inspected.text : original;
         const tool = turn++ === 0 ? { name: 'superdoc_inspect', arguments: JSON.stringify({ includeText: true }) }
-          : turn === 2 ? { name: 'superdoc_perform_action', arguments: JSON.stringify({ action: 'replace_text', find: original, replacement }) } : null;
+          : turn === 2 ? { name: 'superdoc_perform_action', arguments: JSON.stringify({ action: 'replace_text', find, replacement }) } : null;
         return { choices: [{ message: tool ? { role: 'assistant', content: null, tool_calls: [{ id: `call-${turn}`, type: 'function', function: tool }] } : { role: 'assistant', content: 'Review this wording suggestion before applying it.' } }] };
       },
     } });
@@ -90,4 +93,21 @@ test('keeps a selected passage when focus moves into the Agent', async ({ page }
   await page.locator('#agent-prompt').fill('Keep the meaning.');
   await expect(page.locator('#agent-scope')).toHaveValue('selection');
   await expect(page.locator('.selection-preview')).toHaveText(text);
+});
+
+test('applies a selected-passage suggestion through the editor worker', async ({ page }) => {
+  await mockBaseUrl(page);
+  await open(page);
+  await page.locator('.editor-host .superdoc-text-run').first().dblclick();
+  await expect(page.locator('.selection-preview')).toBeVisible();
+  const selected = await page.locator('.selection-preview').innerText();
+  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.getByText('Connection settings', { exact: true }).click();
+  await page.locator('#api-key').fill('synthetic-test-key');
+  await page.getByRole('button', { name: 'Generate suggestions' }).click();
+  await expect(page.locator('.suggestion .original-text')).toHaveText(selected);
+  await page.getByRole('button', { name: 'Apply as revision' }).click();
+  await expect(page.locator('.suggestion')).toHaveAttribute('data-state', 'applied');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('.editor-host')).toContainText(replacement);
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { reactive } from 'vue';
 import { applyProposal } from './review';
 import { dispatchAgentTool } from './tools';
 import type { AgentDocument, AgentProposal, AgentReviewSession, AgentSelection } from './types';
@@ -85,6 +86,18 @@ describe('review before changing the document', () => {
     vi.mocked(document.replace).mockResolvedValue({ success: false } as never);
     await expect(applyProposal(document, review, proposal)).rejects.toThrow('did not confirm');
     expect(proposal.state).toBe('failed');
+  });
+
+  it('passes a cloneable selection to worker APIs when the review is reactive', async () => {
+    const { document, review, proposal, setRevision } = fixture();
+    review.selection = { text: proposal.find, revision: 'r1', target: { kind: 'selection', start: { blockId: 'a', offset: 0 }, end: { blockId: 'a', offset: 14 } } } as AgentSelection;
+    vi.mocked(document.replace).mockImplementation(async (input) => {
+      expect(() => structuredClone(input)).not.toThrow();
+      setRevision('r2');
+      return { success: true } as never;
+    });
+    await applyProposal(document, reactive(review), proposal);
+    expect(proposal.state).toBe('applied');
   });
 
   it('does not enqueue a suggestion if cancelled during a document query', async () => {

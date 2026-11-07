@@ -8,7 +8,9 @@ export async function applyProposal(document: AgentDocument, review: AgentReview
   }
   if (review.selectionReplaced) throw new Error('The selected text has already been replaced. Select it again for another edit.');
 
-  let target = review.selection?.target;
+  // A review session may be Vue-reactive. Worker-backed document APIs cannot
+  // structured-clone a Proxy, so pass a plain public target across the boundary.
+  let target = review.selection ? JSON.parse(JSON.stringify(review.selection.target)) : undefined;
   if (!target) {
     const matches = await document.query.match({
       select: { type: 'text', pattern: proposal.find, mode: 'contains', caseSensitive: true },
