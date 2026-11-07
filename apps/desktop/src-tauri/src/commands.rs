@@ -29,7 +29,7 @@ pub struct DocumentFileMetadata {
     size: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatCompletionRequest {
     base_url: String,
@@ -209,20 +209,18 @@ fn normalize_model_endpoint(raw_url: &str) -> Result<Url, String> {
             "The model Base URL must use HTTPS (HTTP is allowed only for localhost).".to_string(),
         );
     }
-    if url.username() != "" || url.password().is_some() {
+    if !url.username().is_empty() || url.password().is_some() {
         return Err("The model Base URL must not contain credentials.".to_string());
     }
     if url.query().is_some() || url.fragment().is_some() {
         return Err("The model Base URL must not contain a query string or fragment.".to_string());
     }
 
-    let path = url.path().trim_end_matches('/');
+    // `url.path()` borrows the URL immutably and every branch below mutates it,
+    // so copy the trimmed path out before `set_path` needs the same value.
+    let path = url.path().trim_end_matches('/').to_string();
     if path.ends_with("/chat/completions") {
-        url.set_path(if path.is_empty() {
-            "/chat/completions"
-        } else {
-            path
-        });
+        url.set_path(&path);
     } else if path.ends_with("/v1") {
         url.set_path(&format!("{path}/chat/completions"));
     } else if path.is_empty() {
