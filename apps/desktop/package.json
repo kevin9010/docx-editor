@@ -11,6 +11,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 1420 --strictPort",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
+    "test:layout": "playwright test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
@@ -25,6 +26,7 @@
     "yjs": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@tauri-apps/cli": "^2.9.0",
     "@types/node": "catalog:",
     "@vitejs/plugin-vue": "catalog:",

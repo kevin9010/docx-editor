@@ -103,7 +103,14 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
   const file = new File([toArrayBuffer(document.data)], document.name, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const nextEditor = new SuperDoc({
     selector: editorHost.value,
-    toolbar: toolbarHost.value,
+    ui: {
+      toolbar: {
+        container: toolbarHost.value,
+        // The Agent shares the window; only the editor column is available.
+        responsiveTo: 'container',
+        overflow: 'menu',
+      },
+    },
     document: file,
     documentMode: 'editing',
     rulers: true,

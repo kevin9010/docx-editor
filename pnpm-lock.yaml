@@ -315,6 +315,9 @@ importers:
         specifier: ^13.6.19
         version: 13.6.31
     devDependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.64.0
       '@tauri-apps/cli':
         specifier: ^2.9.0
         version: 2.12.4

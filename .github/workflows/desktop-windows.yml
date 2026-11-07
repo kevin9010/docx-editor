@@ -8,6 +8,7 @@ on:
       - '.nvmrc'
       - '.npmrc'
       - 'apps/desktop/**'
+      - 'assets/sample-contract.docx'
       - 'packages/**'
       - 'shared/**'
       - 'scripts/**'
@@ -23,6 +24,7 @@ on:
       - '.nvmrc'
       - '.npmrc'
       - 'apps/desktop/**'
+      - 'assets/sample-contract.docx'
       - 'packages/**'
       - 'shared/**'
       - 'scripts/**'
@@ -85,6 +87,12 @@ jobs:
 
       - name: Build desktop web assets
         run: pnpm --filter superdoc-desktop build:web
+
+      - name: Install browser for desktop layout checks
+        run: pnpm --filter superdoc-desktop exec playwright install chromium
+
+      - name: Check desktop toolbar layout
+        run: pnpm --filter superdoc-desktop test:layout
 
       - name: Check Rust formatting
         run: cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml
