@@ -49,6 +49,12 @@ for (const width of [1440, 1280, 1100, 960]) {
 
     await page.setViewportSize({ width: width === 960 ? 1440 : 960, height: 900 });
     await expectToolbarInsideEditor(page);
+    // On expansion the old compact toolbar already fits, so bounds alone can
+    // pass before it adapts. Wait for a control whose visibility changes before
+    // clicking a trigger that the responsive update is about to replace.
+    const zoom = page.locator('.editor-toolbar [aria-label="Zoom"]');
+    if (width === 960) await expect(zoom).toBeVisible();
+    else await expect(zoom).toBeHidden();
     await page.locator('.editor-toolbar [aria-label="Overflow items"]').click();
     const overflowMenu = page.locator('.sd-toolbar-overflow-menu');
     await expect(overflowMenu).toBeVisible();
