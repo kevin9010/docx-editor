@@ -433,6 +433,26 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/*
+ * Drop target shown while a file is dragged over the window. It must not take
+ * pointer events: the drop has to reach the elements underneath so the window
+ * listeners still see it.
+ */
+.drop-overlay {
+  display: flex;
+  position: fixed;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  z-index: 60;
+  border: 2px dashed #60a5fa;
+  background: rgb(15 23 42 / 78%);
+  color: #e5e7eb;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
 @media (max-width: 1100px) {
   .agent-pane {
     width: 310px;

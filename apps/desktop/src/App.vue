@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { SuperDoc } from 'superdoc';
 import type { BrowserDocumentApi } from 'superdoc';
 import {
@@ -29,6 +30,7 @@ const isSaving = ref(false);
 const isDirty = ref(false);
 const autoSaveEnabled = ref(true);
 const showAgent = ref(true);
+const isDragActive = ref(false);
 const agentPrompt = ref('');
 const agentRunning = ref(false);
 const agentStatus = ref('');
@@ -42,6 +44,7 @@ const apiKey = ref('');
 let autoSaveTimer: number | null = null;
 let metadataTimer: number | null = null;
 let agentAbortController: AbortController | null = null;
+let unlistenDragDrop: (() => void) | null = null;
 let initializing = false;
 let suppressAutoSave = false;
 let mountGeneration = 0;
@@ -59,6 +62,13 @@ function messageFromError(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'An unexpected desktop error occurred.';
+}
+
+const docxNamePattern = /\.docx$/i;
+
+function confirmDiscardChanges(action: string): boolean {
+  if (!isDirty.value) return true;
+  return window.confirm(`Discard unsaved changes and ${action}?`);
 }
 
 function getLiveDocument(): BrowserDocumentApi | null {
@@ -146,7 +156,7 @@ async function loadDocument(document: OpenedDocument): Promise<void> {
 }
 
 async function openDocument(): Promise<void> {
-  if (isDirty.value && !window.confirm('Discard unsaved changes and open another document?')) return;
+  if (!confirmDiscardChanges('open another document')) return;
   isLoading.value = true;
   clearError();
   try {
@@ -181,6 +191,75 @@ async function handleBrowserFile(event: Event): Promise<void> {
   } finally {
     isLoading.value = false;
   }
+}
+
+/**
+ * Shared entry point for the two drop routes: the native drop Tauri reports in
+ * the desktop build, and the HTML5 drop the browser preview uses.
+ */
+async function openDroppedDocument(name: string, load: () => Promise<OpenedDocument>): Promise<void> {
+  if (!docxNamePattern.test(name)) {
+    errorMessage.value = 'Only DOCX files can be opened by dropping them on the window.';
+    return;
+  }
+  if (!confirmDiscardChanges('open the dropped document')) return;
+  isLoading.value = true;
+  clearError();
+  try {
+    await loadDocument(await load());
+  } catch (error) {
+    errorMessage.value = messageFromError(error);
+    status.value = 'Open failed.';
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+/*
+ * A Tauri window keeps `dragDropEnabled` on, so the webview swallows HTML5 drag
+ * events and the OS drop arrives through the native event below. The HTML5
+ * handlers stay for the Vite preview, which has no native bridge.
+ */
+async function listenForNativeDrops(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    unlistenDragDrop = await getCurrentWebviewWindow().onDragDropEvent(({ payload }) => {
+      if (payload.type === 'enter') {
+        isDragActive.value = true;
+        return;
+      }
+      if (payload.type === 'over') return;
+      isDragActive.value = false;
+      if (payload.type !== 'drop') return;
+      const [filePath] = payload.paths;
+      if (filePath) void openDroppedDocument(filePath, () => readDocumentFromPath(filePath));
+    });
+  } catch {
+    // Without the bridge a drop simply does nothing; Open still works.
+    isDragActive.value = false;
+  }
+}
+
+function handleWindowDragOver(event: DragEvent): void {
+  if (isTauriRuntime()) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  isDragActive.value = true;
+}
+
+function handleWindowDragLeave(event: DragEvent): void {
+  if (isTauriRuntime()) return;
+  // `dragleave` also fires whenever the pointer crosses into a child element,
+  // so the overlay only goes away once the drag has left the window entirely.
+  if (event.relatedTarget === null) isDragActive.value = false;
+}
+
+function handleWindowDrop(event: DragEvent): void {
+  if (isTauriRuntime()) return;
+  event.preventDefault();
+  isDragActive.value = false;
+  const file = event.dataTransfer?.files?.[0];
+  if (file) void openDroppedDocument(file.name, () => readBrowserFile(file));
 }
 
 async function exportCurrentDocument(): Promise<Uint8Array> {
@@ -365,11 +444,20 @@ function handleKeydown(event: KeyboardEvent): void {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown);
+  window.addEventListener('dragover', handleWindowDragOver);
+  window.addEventListener('dragleave', handleWindowDragLeave);
+  window.addEventListener('drop', handleWindowDrop);
   metadataTimer = window.setInterval(() => void pollDiskChanges(), 2500);
+  void listenForNativeDrops();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('dragover', handleWindowDragOver);
+  window.removeEventListener('dragleave', handleWindowDragLeave);
+  window.removeEventListener('drop', handleWindowDrop);
+  unlistenDragDrop?.();
+  unlistenDragDrop = null;
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   if (metadataTimer !== null) window.clearInterval(metadataTimer);
   agentAbortController?.abort();
@@ -469,5 +557,6 @@ onBeforeUnmount(() => {
     </section>
 
     <input ref="browserFileInput" class="sr-only" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="handleBrowserFile" />
+    <div v-if="isDragActive" class="drop-overlay">Drop a DOCX file to open it</div>
   </main>
 </template>
