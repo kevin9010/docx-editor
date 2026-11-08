@@ -16,3 +16,11 @@
 
 Keep each controller on the existing surface state. Do not introduce a second event bus or state store for the public
 handle.
+
+## Interface language
+
+Set `ui.locale` to `'en'` (default) or `'zh-CN'` at startup. Read it with
+`superdoc.ui.getLocale()` and change it with `superdoc.ui.setLocale(locale)`.
+Language belongs to each instance. Changing it updates built-in interface labels
+without remounting the document, altering content, or clearing history. Unknown
+application labels keep their original text.

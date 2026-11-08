@@ -1,3 +1,4 @@
+import { translateUi, uiLocale } from '../../ui-i18n.js';
 import { h } from 'vue';
 import type { Component } from 'vue';
 import type {
@@ -251,6 +252,7 @@ export const makeDefaultItems = ({
   additionalItems = [],
 }: DefaultItemsInput): { defaultItems: ToolbarItem[]; overflowItems: ToolbarItem[] } => {
   const toolbarIcons = stringEntries(configuredIcons, builtInToolbarIcons);
+  const t = (text: string) => translateUi(uiLocale(superToolbar.superdoc ?? undefined).value, text);
   const toolbarTexts = stringEntries(configuredTexts, builtInToolbarTexts);
   const bold = useToolbarItem({
     type: 'button',
@@ -259,7 +261,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.bold,
     tooltip: toolbarTexts.bold,
     attributes: {
-      ariaLabel: 'Bold',
+      ariaLabel: t('Bold'),
     },
   });
 
@@ -280,7 +282,7 @@ export const makeDefaultItems = ({
     style: { width: '116px' },
     suppressActiveHighlight: true,
     attributes: {
-      ariaLabel: 'Font family',
+      ariaLabel: t('Font family'),
     },
     options: fontOptions,
     onActivate: ({ fontFamily } = {}, isMultiple = false) => {
@@ -383,7 +385,7 @@ export const makeDefaultItems = ({
     isWide: true,
     command: 'setFontSize',
     attributes: {
-      ariaLabel: 'Font size',
+      ariaLabel: t('Font size'),
     },
     options: fontSizeOptions,
     onActivate: ({ fontSize: size }, isMultiple = false) => {
@@ -439,7 +441,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.italic,
     tooltip: toolbarTexts.italic,
     attributes: {
-      ariaLabel: 'Italic',
+      ariaLabel: t('Italic'),
     },
   });
 
@@ -450,7 +452,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.underline,
     tooltip: toolbarTexts.underline,
     attributes: {
-      ariaLabel: 'Underline',
+      ariaLabel: t('Underline'),
     },
   });
 
@@ -461,7 +463,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.strikethrough,
     tooltip: toolbarTexts.strikethrough,
     attributes: {
-      ariaLabel: 'Strikethrough',
+      ariaLabel: t('Strikethrough'),
     },
   });
 
@@ -477,7 +479,7 @@ export const makeDefaultItems = ({
     noArgumentCommand: 'unsetHighlight',
     suppressActiveHighlight: true,
     attributes: {
-      ariaLabel: 'Highlight',
+      ariaLabel: t('Highlight'),
     },
     options: [
       {
@@ -503,7 +505,7 @@ export const makeDefaultItems = ({
     command: 'setColor',
     suppressActiveHighlight: true,
     attributes: {
-      ariaLabel: 'Color',
+      ariaLabel: t('Color'),
     },
     options: [
       {
@@ -526,7 +528,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.search,
     group: 'right',
     attributes: {
-      ariaLabel: 'Search',
+      ariaLabel: t('Search'),
     },
   });
 
@@ -537,7 +539,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.link,
     tooltip: toolbarTexts.link,
     attributes: {
-      ariaLabel: 'Link dropdown',
+      ariaLabel: t('Link dropdown'),
     },
     options: [
       {
@@ -613,7 +615,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.image,
     disabled: false,
     attributes: {
-      ariaLabel: 'Image',
+      ariaLabel: t('Image'),
     },
   });
 
@@ -625,7 +627,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.tableOfContents,
     disabled: false,
     attributes: {
-      ariaLabel: 'Table of contents',
+      ariaLabel: t('Table of contents'),
     },
   });
 
@@ -714,7 +716,7 @@ export const makeDefaultItems = ({
     command: 'insertTable',
     suppressActiveHighlight: true,
     attributes: {
-      ariaLabel: 'Table',
+      ariaLabel: t('Table'),
     },
     options: [
       {
@@ -748,7 +750,7 @@ export const makeDefaultItems = ({
     hideLabel: true,
     disabled: true,
     attributes: {
-      ariaLabel: 'Table actions',
+      ariaLabel: t('Table actions'),
     },
     options: [
       {
@@ -802,7 +804,7 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.deleteRow,
       props: {
         'data-item': 'btn-tableActions-option',
-        ariaLabel: 'Delete row',
+        ariaLabel: t('Delete row'),
       },
     },
     {
@@ -811,7 +813,7 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.deleteColumn,
       props: {
         'data-item': 'btn-tableActions-option',
-        ariaLabel: 'Delete column',
+        ariaLabel: t('Delete column'),
       },
     },
     {
@@ -820,7 +822,7 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.deleteTable,
       props: {
         'data-item': 'btn-tableActions-option',
-        ariaLabel: 'Delete table',
+        ariaLabel: t('Delete table'),
       },
     },
     {
@@ -839,7 +841,7 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.mergeCells,
       props: {
         'data-item': 'btn-tableActions-option',
-        ariaLabel: 'Merge cells',
+        ariaLabel: t('Merge cells'),
       },
     },
     {
@@ -857,7 +859,7 @@ export const makeDefaultItems = ({
       icon: toolbarIcons.fixTables,
       props: {
         'data-item': 'btn-tableActions-option',
-        ariaLabel: 'Fix tables',
+        ariaLabel: t('Fix tables'),
       },
     },
   ];
@@ -888,7 +890,7 @@ export const makeDefaultItems = ({
     labelAttr: 'textAlign',
     suppressActiveHighlight: true,
     attributes: {
-      ariaLabel: 'Text align',
+      ariaLabel: t('Text align'),
     },
     options: [
       {
@@ -944,7 +946,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
     attributes: {
-      ariaLabel: 'Bullet list',
+      ariaLabel: t('Bullet list'),
     },
     options: [
       {
@@ -978,7 +980,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
     attributes: {
-      ariaLabel: 'Numbered list',
+      ariaLabel: t('Numbered list'),
     },
     options: [
       {
@@ -1009,7 +1011,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.indentLeft,
     disabled: false,
     attributes: {
-      ariaLabel: 'Left indent',
+      ariaLabel: t('Left indent'),
     },
   });
 
@@ -1021,7 +1023,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.indentRight,
     disabled: false,
     attributes: {
-      ariaLabel: 'Right indent',
+      ariaLabel: t('Right indent'),
     },
   });
 
@@ -1032,7 +1034,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.overflow,
     disabled: false,
     attributes: {
-      ariaLabel: 'Overflow items',
+      ariaLabel: t('Overflow items'),
     },
   });
 
@@ -1050,7 +1052,7 @@ export const makeDefaultItems = ({
     inlineTextInputVisible: false,
     hasInlineTextInput: true,
     attributes: {
-      ariaLabel: 'Zoom',
+      ariaLabel: t('Zoom'),
     },
     options: [
       { label: '50%', key: 0.5, props: { 'data-item': 'btn-zoom-option' } },
@@ -1082,11 +1084,11 @@ export const makeDefaultItems = ({
     inlineTextInputVisible: false,
     hasInlineTextInput: false,
     attributes: {
-      ariaLabel: 'Measurement unit',
+      ariaLabel: t('Measurement unit'),
     },
     options: [
-      { label: 'Inches', key: 'in', props: { 'data-item': 'btn-measurement-unit-option' } },
-      { label: 'Centimeters', key: 'cm', props: { 'data-item': 'btn-measurement-unit-option' } },
+      { label: t('Inches'), key: 'in', props: { 'data-item': 'btn-measurement-unit-option' } },
+      { label: t('Centimeters'), key: 'cm', props: { 'data-item': 'btn-measurement-unit-option' } },
     ],
     onActivate: ({ measurementUnit: value }) => {
       if (!value) return;
@@ -1103,7 +1105,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.undo,
     group: 'left',
     attributes: {
-      ariaLabel: 'Undo',
+      ariaLabel: t('Undo'),
     },
   });
 
@@ -1116,7 +1118,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.redo,
     group: 'left',
     attributes: {
-      ariaLabel: 'Redo',
+      ariaLabel: t('Redo'),
     },
   });
 
@@ -1129,7 +1131,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.trackChangesAccept,
     group: 'left',
     attributes: {
-      ariaLabel: 'Accept tracked changes',
+      ariaLabel: t('Accept tracked changes'),
     },
   });
 
@@ -1142,7 +1144,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.trackChangesReject,
     group: 'left',
     attributes: {
-      ariaLabel: 'Reject tracked changes',
+      ariaLabel: t('Reject tracked changes'),
     },
   });
 
@@ -1153,7 +1155,7 @@ export const makeDefaultItems = ({
     tooltip: toolbarTexts.clearFormatting,
     icon: toolbarIcons.clearFormatting,
     attributes: {
-      ariaLabel: 'Clear formatting',
+      ariaLabel: t('Clear formatting'),
     },
   });
 
@@ -1164,7 +1166,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.copyFormat,
     command: 'copyFormat',
     attributes: {
-      ariaLabel: 'Copy formatting',
+      ariaLabel: t('Copy formatting'),
     },
   });
 
@@ -1198,7 +1200,7 @@ export const makeDefaultItems = ({
     attributes: {
       dropdownPosition: 'right',
       className: 'sd-toolbar-item--doc-mode',
-      ariaLabel: 'Document mode',
+      ariaLabel: t('Document mode'),
     },
     options: [
       {
@@ -1255,7 +1257,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.ruler,
     tooltip: toolbarTexts.ruler,
     attributes: {
-      ariaLabel: 'Ruler',
+      ariaLabel: t('Ruler'),
     },
   });
 
@@ -1267,7 +1269,7 @@ export const makeDefaultItems = ({
     icon: toolbarIcons.formattingMarks,
     tooltip: toolbarTexts.formattingMarks,
     attributes: {
-      ariaLabel: 'Formatting marks',
+      ariaLabel: t('Formatting marks'),
     },
   });
 
@@ -1286,7 +1288,7 @@ export const makeDefaultItems = ({
     disabled: false,
     attributes: {
       className: 'sd-toolbar-item--linked-styles',
-      ariaLabel: 'Linked styles',
+      ariaLabel: t('Linked styles'),
     },
     options: [
       {
@@ -1353,7 +1355,7 @@ export const makeDefaultItems = ({
     dropdownValueKey: 'key',
     selectedValue: '1',
     attributes: {
-      ariaLabel: 'Line height',
+      ariaLabel: t('Line height'),
     },
     options: [1, 1.15, 1.5, 2, 2.5, 3].map((lineHeightValue) => {
       return {

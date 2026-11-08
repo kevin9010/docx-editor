@@ -1,6 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('superdoc.desktop.locale', 'en'));
+});
+
 const sampleDocument = fileURLToPath(new URL('../../../../assets/sample-contract.docx', import.meta.url));
 
 async function open(page: Page): Promise<void> {

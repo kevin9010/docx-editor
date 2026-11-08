@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
+
+const { t } = useUiTranslation();
 const emit = defineEmits(['command']);
 const props = defineProps({
   active: {
@@ -19,7 +22,7 @@ const getSeparatorColor = () => {
 </script>
 
 <template>
-  <div class="toolbar-separator" role="separator" aria-label="Toolbar separator">
+  <div class="toolbar-separator" role="separator" :aria-label="t('Toolbar separator')">
     <div class="separator-inner" :style="{ backgroundColor: getSeparatorColor() }"></div>
   </div>
 </template>

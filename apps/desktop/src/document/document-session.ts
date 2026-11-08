@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 
@@ -42,10 +43,10 @@ export async function chooseAndReadDocument(): Promise<OpenedDocument | null> {
   }
 
   const selected = await open({
-    title: 'Open Word document',
+    title: t('Open Word document'),
     multiple: false,
     directory: false,
-    filters: [{ name: 'Word document', extensions: ['docx'] }],
+    filters: [{ name: t('Word document'), extensions: ['docx'] }],
   });
 
   if (!selected || Array.isArray(selected)) return null;
@@ -66,9 +67,9 @@ export async function chooseSavePath(defaultPath?: string | null): Promise<strin
   }
 
   const selected = await save({
-    title: 'Save Word document',
+    title: t('Save Word document'),
     defaultPath: defaultPath ?? undefined,
-    filters: [{ name: 'Word document', extensions: ['docx'] }],
+    filters: [{ name: t('Word document'), extensions: ['docx'] }],
   });
 
   if (!selected) return null;

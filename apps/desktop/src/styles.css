@@ -87,66 +87,16 @@ textarea:focus {
   background: #0f172a;
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  min-height: 64px;
-  padding: 10px 18px;
-  border-bottom: 1px solid #1e293b;
-  background: #111c31;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 220px;
-}
-
-.brand-mark {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-
-.brand h1,
-.brand p,
-.agent-title h2,
-.agent-description,
-.agent-summary p,
-.privacy-note {
-  margin: 0;
-}
-
-.brand h1 {
-  color: #f8fafc;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.brand p {
-  max-width: 220px;
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.document-actions {
-  display: flex;
-  flex: 1;
-  gap: 8px;
-}
-
+.app-menu { display: flex; align-items: center; flex-shrink: 0; height: 30px; padding: 0 8px; gap: 2px; background: #111827; border-bottom: 1px solid #334155; z-index: 30; font-size: 12px; }
+.menu-group { position: relative; height: 100%; }
+.menu-group > button { height: 100%; padding: 3px 12px; border: 0; border-radius: 4px; background: transparent; }
+.menu-group > button[aria-expanded='true'] { background: #334155; }
+.menu-popup { position: absolute; top: 100%; left: 0; min-width: 230px; padding: 5px; border: 1px solid #475569; border-radius: 8px; background: #172235; box-shadow: 0 8px 24px rgb(15 23 42 / 35%); }
+.menu-popup button { width: 100%; display: flex; justify-content: space-between; gap: 24px; padding: 8px 10px; border: 0; background: transparent; font-size: 12px; text-align: left; }
+.menu-popup kbd { color: #94a3b8; font: inherit; }
+.menu-popup hr { border: 0; border-top: 1px solid #334155; margin: 4px; }
+.window-file-name { min-width: 0; margin-left: 16px; color: #94a3b8; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.agent-title h2, .agent-description, .agent-summary p, .privacy-note { margin: 0; }
 .header-status {
   display: flex;
   align-items: center;
@@ -539,7 +489,8 @@ textarea:focus {
     min-width: 310px;
   }
 
-  .brand {
-    min-width: 180px;
-  }
 }
+
+.status-bar .header-status { margin-left: auto; flex-shrink: 0; }
+.agent-status-text { min-width: 0; max-height: 90px; overflow: auto; overflow-wrap: anywhere; }
+.agent-panel > .agent-error { flex-shrink: 0; margin: 0 12px 8px; max-height: 110px; overflow: auto; overflow-wrap: anywhere; }

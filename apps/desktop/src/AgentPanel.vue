@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { locale, t } from './i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { WRITING_ACTIONS, buildWritingPrompt, type WritingAction } from './agent/actions';
 import { connectCodex, inspectCodex, runCodexAgent, type CodexClient, type CodexStatus } from './agent/codex';
@@ -131,7 +132,7 @@ async function run(): Promise<void> {
     review.value = { revision: info.revision, ...(selection ? { selection } : {}), proposals: [] };
     const options = {
       document, review: review.value,
-      prompt: buildWritingPrompt(action.value, instruction.value, language.value, Boolean(selection)),
+      prompt: buildWritingPrompt(action.value, instruction.value, language.value, Boolean(selection)) + (locale.value === 'zh-CN' ? '\nExplain progress and suggestions to the user in Simplified Chinese. Keep the replacement text in the original or explicitly requested output language.' : ''),
       baseUrl: baseUrl.value, apiKey: apiKey.value,
       model: provider.value === 'codex' ? codexModel.value : model.value,
       signal: abort.signal,
@@ -168,59 +169,59 @@ onBeforeUnmount(() => { endProgress(); disposed = true; abort?.abort(); void cli
 <template>
   <div class="agent-panel">
     <header class="agent-heading">
-      <div class="agent-title"><div><span class="eyebrow">WRITING ASSISTANT</span><h2>Document Agent</h2></div></div>
+      <div class="agent-title"><div><span class="eyebrow">{{ t('WRITING ASSISTANT') }}</span><h2>{{ t('Document Agent') }}</h2></div></div>
     </header>
-    <section v-if="status || progressActive" class="agent-progress" aria-label="Agent progress">
-      <div class="progress-current"><span v-if="progressActive" class="progress-spinner" /><strong class="agent-status-text" role="status">{{ status }}</strong><button v-if="progressActive" @click="stop">{{ review?.proposals.length && running ? 'Stop and review' : 'Stop' }}</button></div>
-      <p class="progress-time">{{ progressActive ? 'Elapsed' : 'Duration' }} {{ elapsed }}s<span v-if="progressActive"> · Last update {{ quietSeconds }}s ago</span><span v-if="review?.proposals.length"> · {{ review.proposals.length }} suggestion(s)</span></p>
-      <p v-if="progressActive && quietSeconds >= 20" class="progress-wait">No new update for {{ quietSeconds }}s. Waiting for {{ provider === 'codex' ? 'Codex / its model provider' : 'the model endpoint' }}; you can stop at any time.</p>
+    <section v-if="status || progressActive" class="agent-progress" :aria-label="t('Agent progress')">
+      <div class="progress-current"><span v-if="progressActive" class="progress-spinner" /><strong class="agent-status-text" role="status">{{ t(status) }}</strong><button v-if="progressActive" @click="stop">{{ t(review?.proposals.length && running ? 'Stop and review' : 'Stop') }}</button></div>
+      <p class="progress-time">{{ t(progressActive ? 'Elapsed' : 'Duration') }} {{ elapsed }}s<span v-if="progressActive"> · {{ t(`Last update ${quietSeconds}s ago`) }}</span><span v-if="review?.proposals.length"> · {{ t(`${review.proposals.length} suggestion(s)`) }}</span></p>
+      <p v-if="progressActive && quietSeconds >= 20" class="progress-wait">{{ t(`No new update for ${quietSeconds}s. Waiting for ${t(provider === 'codex' ? 'Codex / its model provider' : 'the model endpoint')}; you can stop at any time.`) }}</p>
       <p v-if="running && output" class="progress-preview">{{ output.slice(-240) }}</p>
-      <details class="activity-log"><summary>Activity · {{ activityLog.length }} updates</summary><ol><li v-for="(entry, index) in activityLog" :key="index"><time>+{{ Math.max(0, Math.floor((entry.at - startedAt) / 1000)) }}s</time><span>{{ entry.message }}</span></li></ol></details>
+      <details class="activity-log"><summary>{{ t(`Activity · ${activityLog.length} updates`) }}</summary><ol><li v-for="(entry, index) in activityLog" :key="index"><time>+{{ Math.max(0, Math.floor((entry.at - startedAt) / 1000)) }}s</time><span>{{ t(entry.message) }}</span></li></ol></details>
     </section>
-    <div v-if="error" class="agent-error" role="alert">{{ error }}</div>
+    <div v-if="error" class="agent-error" role="alert">{{ t(error) }}</div>
     <div class="agent-content">
-    <label class="field-label" for="agent-provider">Connect with</label>
-    <select id="agent-provider" v-model="provider" :disabled="busy"><option value="codex">Local Codex CLI</option><option value="baseUrl">Base URL</option></select>
+    <label class="field-label" for="agent-provider">{{ t('Connect with') }}</label>
+    <select id="agent-provider" v-model="provider" :disabled="busy"><option value="codex">{{ t('Local Codex CLI') }}</option><option value="baseUrl">{{ t('Base URL') }}</option></select>
     <details class="connection-settings" :open="settingsOpen" @toggle="settingsOpen = ($event.target as HTMLDetailsElement).open">
-      <summary>Connection settings</summary>
+      <summary>{{ t('Connection settings') }}</summary>
       <div v-if="provider === 'codex'" class="agent-settings">
-        <label class="field-label" for="codex-path">Codex executable <span>(optional)</span></label>
-        <input id="codex-path" v-model="executable" :disabled="busy" placeholder="Auto-detect installed Codex" />
-        <label class="field-label" for="codex-model">Model</label>
-        <select id="codex-model" v-model="codexModel" :disabled="busy"><option value="">CLI default</option><option v-if="codexModel && !connection?.models.some(item => item.model === codexModel)" :value="codexModel">{{ codexModel }}</option><option v-for="item in connection?.models" :key="item.model" :value="item.model">{{ item.displayName }}</option></select>
-        <button :disabled="busy" @click="checkConnection">Check connection</button>
+        <label class="field-label" for="codex-path">{{ t('Codex executable') }} <span>{{ t('(optional)') }}</span></label>
+        <input id="codex-path" v-model="executable" :disabled="busy" :placeholder="t('Auto-detect installed Codex')" />
+        <label class="field-label" for="codex-model">{{ t('Model') }}</label>
+        <select id="codex-model" v-model="codexModel" :disabled="busy"><option value="">{{ t('CLI default') }}</option><option v-if="codexModel && !connection?.models.some(item => item.model === codexModel)" :value="codexModel">{{ codexModel }}</option><option v-for="item in connection?.models" :key="item.model" :value="item.model">{{ item.displayName }}</option></select>
+        <button :disabled="busy" @click="checkConnection">{{ t('Check connection') }}</button>
         <small v-if="connection" class="connection-path">{{ connection.executable }}</small>
-        <p class="agent-description">Uses the Codex already installed on this computer and its existing login.</p>
+        <p class="agent-description">{{ t('Uses the Codex already installed on this computer and its existing login.') }}</p>
       </div>
       <div v-else class="agent-settings">
-        <label class="field-label" for="base-url">Base URL</label><input id="base-url" v-model="baseUrl" :disabled="busy" autocomplete="off" />
-        <label class="field-label" for="model">Model</label><input id="model" v-model="model" :disabled="busy" autocomplete="off" />
-        <label class="field-label" for="api-key">API key <span>(session only)</span></label><input id="api-key" v-model="apiKey" :disabled="busy" type="password" autocomplete="off" placeholder="Not stored by the app" />
+        <label class="field-label" for="base-url">{{ t('Base URL') }}</label><input id="base-url" v-model="baseUrl" :disabled="busy" autocomplete="off" />
+        <label class="field-label" for="model">{{ t('Model') }}</label><input id="model" v-model="model" :disabled="busy" autocomplete="off" />
+        <label class="field-label" for="api-key">{{ t('API key') }} <span>{{ t('(session only)') }}</span></label><input id="api-key" v-model="apiKey" :disabled="busy" type="password" autocomplete="off" :placeholder="t('Not stored by the app')" />
       </div>
     </details>
-    <p class="quick-action-hint">Click an action to run on the chosen text.</p>
-    <div class="writing-actions" aria-label="Writing actions"><button v-for="item in WRITING_ACTIONS" :key="item.id" :aria-pressed="action === item.id" :disabled="busy || disabled || !document" @click="runAction(item.id)">{{ item.label }}</button><button :aria-pressed="action === 'custom'" :disabled="busy" @click="action = 'custom'">Custom</button></div>
-    <label class="field-label" for="agent-scope">Work on</label>
-    <select id="agent-scope" v-model="scope" :disabled="busy"><option value="document">Whole document</option><option value="selection" :disabled="!selection">Selected passage</option></select>
+    <p class="quick-action-hint">{{ t('Click an action to run on the chosen text.') }}</p>
+    <div class="writing-actions" :aria-label="t('Writing actions')"><button v-for="item in WRITING_ACTIONS" :key="item.id" :aria-pressed="action === item.id" :disabled="busy || disabled || !document" @click="runAction(item.id)">{{ t(item.label) }}</button><button :aria-pressed="action === 'custom'" :disabled="busy" @click="action = 'custom'">{{ t('Custom') }}</button></div>
+    <label class="field-label" for="agent-scope">{{ t('Work on') }}</label>
+    <select id="agent-scope" v-model="scope" :disabled="busy"><option value="document">{{ t('Whole document') }}</option><option value="selection" :disabled="!selection">{{ t('Selected passage') }}</option></select>
     <blockquote v-if="scope === 'selection' && selection" class="selection-preview">{{ selection.text }}</blockquote>
-    <p v-if="scope === 'selection' && !selection" class="agent-description">Select a passage in the document to continue.</p>
-    <label class="field-label" for="agent-language">Output language <span>(optional)</span></label>
-    <input id="agent-language" v-model="language" :disabled="busy" :placeholder="action === 'translate' ? 'E.g. English / 简体中文' : 'Keep original language'" />
-    <label class="field-label" for="agent-prompt">Instruction <span v-if="action !== 'custom'">(optional)</span></label>
-    <textarea id="agent-prompt" v-model="instruction" :disabled="busy" rows="3" placeholder="E.g. Make the tone warmer while preserving the meaning." />
-    <div class="agent-controls"><button class="primary" :disabled="!canRun" @click="run">Generate suggestions</button></div>
-    <div v-if="output" class="agent-summary"><span class="eyebrow">RESPONSE</span><p>{{ output }}</p></div>
+    <p v-if="scope === 'selection' && !selection" class="agent-description">{{ t('Select a passage in the document to continue.') }}</p>
+    <label class="field-label" for="agent-language">{{ t('Output language') }} <span>{{ t('(optional)') }}</span></label>
+    <input id="agent-language" v-model="language" :disabled="busy" :placeholder="t(action === 'translate' ? 'E.g. English / 简体中文' : 'Keep original language')" />
+    <label class="field-label" for="agent-prompt">{{ t('Instruction') }} <span v-if="action !== 'custom'">{{ t('(optional)') }}</span></label>
+    <textarea id="agent-prompt" v-model="instruction" :disabled="busy" rows="3" :placeholder="t('E.g. Make the tone warmer while preserving the meaning.')" />
+    <div class="agent-controls"><button class="primary" :disabled="!canRun" @click="run">{{ t('Generate suggestions') }}</button></div>
+    <div v-if="output" class="agent-summary"><span class="eyebrow">{{ t('RESPONSE') }}</span><p>{{ output }}</p></div>
     <div v-if="review?.proposals.length" class="suggestions">
-      <h3>Suggestions · {{ review.proposals.length }}</h3>
+      <h3>{{ t(`Suggestions · ${review.proposals.length}`) }}</h3>
       <article v-for="proposal in review.proposals" :key="proposal.id" class="suggestion" :data-state="proposal.state">
-        <span class="eyebrow">{{ proposal.action === 'replace_text' ? 'REVISION' : 'COMMENT' }} · {{ proposal.state }}</span>
-        <label>Original</label><p class="original-text">{{ proposal.find }}</p>
-        <label>{{ proposal.action === 'replace_text' ? 'Suggested' : 'Comment' }}</label><p class="replacement-text">{{ proposal.replacement || proposal.comment || '(Delete this text)' }}</p>
-        <div v-if="proposal.state === 'pending'" class="suggestion-actions"><button class="primary" :disabled="busy || disabled" @click="apply(proposal)">{{ proposal.action === 'replace_text' ? 'Apply as revision' : 'Add comment' }}</button><button :disabled="busy" @click="proposal.state = 'dismissed'">Dismiss</button></div>
-        <p v-if="proposal.error" class="error-text">{{ proposal.error }}</p>
+        <span class="eyebrow">{{ t(proposal.action === 'replace_text' ? 'REVISION' : 'COMMENT') }} · {{ t(proposal.state) }}</span>
+        <label>{{ t('Original') }}</label><p class="original-text">{{ proposal.find }}</p>
+        <label>{{ t(proposal.action === 'replace_text' ? 'Suggested' : 'Comment') }}</label><p class="replacement-text">{{ proposal.replacement || proposal.comment || t('(Delete this text)') }}</p>
+        <div v-if="proposal.state === 'pending'" class="suggestion-actions"><button class="primary" :disabled="busy || disabled" @click="apply(proposal)">{{ t(proposal.action === 'replace_text' ? 'Apply as revision' : 'Add comment') }}</button><button :disabled="busy" @click="proposal.state = 'dismissed'">{{ t('Dismiss') }}</button></div>
+        <p v-if="proposal.error" class="error-text">{{ t(proposal.error) }}</p>
       </article>
     </div>
-    <p class="privacy-note">Only when you run the Agent, the chosen document context is sent through {{ provider === 'codex' ? 'your Codex provider' : 'your configured endpoint' }}. Suggestions are saved only when you apply them and save the document.</p>
+    <p class="privacy-note">{{ t(`Only when you run the Agent, the chosen document context is sent through ${t(provider === 'codex' ? 'your Codex provider' : 'your configured endpoint')}. Suggestions are saved only when you apply them and save the document.`) }}</p>
     </div>
   </div>
 </template>

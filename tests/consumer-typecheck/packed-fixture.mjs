@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { packageManagerCommand } from '../../scripts/lib/package-manager-command.mjs';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -38,14 +39,14 @@ export function installPackedSuperdocFixture({ fixtureRoot, superdocTarball, eng
     workspaceCreated = true;
 
     execFileSync(
-      'pnpm',
+      ...packageManagerCommand('pnpm',
       [
         'install',
         '--ignore-scripts',
         '--no-frozen-lockfile',
         '--no-lockfile',
         '--prefer-offline',
-      ],
+      ]),
       { cwd: fixtureRoot, stdio: 'inherit' },
     );
   } finally {

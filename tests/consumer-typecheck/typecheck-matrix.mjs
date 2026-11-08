@@ -10,6 +10,7 @@
  * superdoc.tgz, or --skip-pack to reuse the already-installed fixture.
  */
 import { execFileSync, execSync } from 'child_process';
+import { packageManagerCommand } from '../../scripts/lib/package-manager-command.mjs';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
@@ -40,6 +41,12 @@ try {
 console.log();
 
 if (!skipPack) {
+  // The fixture also imports the standalone Document API package. A public
+  // checkout may not have the declarations normally restored by Orbit CI.
+  execFileSync(...packageManagerCommand('pnpm', ['exec', 'tsc', '-b', 'packages/document-api']), {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
   const internal = process.env.SUPERDOC_EVAL_FAST_BUILD === '1';
   const tarballPath = join(repoRoot, 'packages', 'superdoc', internal ? 'superdoc-internal.tgz' : 'superdoc.tgz');
   if (useExistingTarball) {
@@ -62,7 +69,7 @@ if (!skipPack) {
   }
   const fontsPackRoot = mkdtempSync(join(tmpdir(), 'superdoc-fonts-pack-'));
   try {
-    execFileSync('npm', ['pack', '--silent', '--pack-destination', fontsPackRoot], {
+    execFileSync(...packageManagerCommand('npm', ['pack', '--silent', '--pack-destination', fontsPackRoot]), {
       cwd: join(repoRoot, 'packages', 'fonts'),
       stdio: 'inherit',
     });

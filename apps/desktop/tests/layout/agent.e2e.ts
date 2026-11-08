@@ -3,6 +3,10 @@ import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('superdoc.desktop.locale', 'en'));
+});
+
 const sampleDocument = fileURLToPath(new URL('../../../../assets/sample-contract.docx', import.meta.url));
 const original = 'Mutual Agreement for Document Excellence';
 const replacement = 'A Clear Agreement for Document Excellence';
@@ -65,7 +69,8 @@ test('previews a suggestion, applies it as a revision, and exports a DOCX', asyn
   // Browser download exercises the same SuperDoc DOCX export as native Save.
   await page.evaluate(() => { Reflect.deleteProperty(window, '__TAURI_INTERNALS__'); });
   const downloaded = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Save Ctrl+S', exact: true }).click();
   const download = await downloaded;
   const savedPath = testInfo.outputPath('reviewed.docx');
   await download.saveAs(savedPath);

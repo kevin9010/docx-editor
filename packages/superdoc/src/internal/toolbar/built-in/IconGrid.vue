@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import type { PropType, Ref } from 'vue';
 import IconGridRow from './IconGridRow.vue';
 import type { ColorOption } from './IconGridRow.vue';
 import DropIcon from '@superdoc/common/icons/droplet-slash.svg?raw';
+
+const { t } = useUiTranslation();
 const emit = defineEmits(['select', 'clickoutside']);
 const props = defineProps({
   icons: {
@@ -34,17 +37,17 @@ const handleSelect = (option: string) => {
       v-if="hasNoneIcon"
       class="none-option"
       role="menuitem"
-      aria-label="Clear color selection"
+      :aria-label="t('Clear color selection')"
       @click="handleSelect('none')"
     >
       <span v-html="DropIcon" class="none-icon"></span>
-      None
+      {{ t('None') }}
     </div>
     <div class="option-grid-ctn">
       <IconGridRow :icons="icons" :active-color="activeColor" @select="handleSelect" />
 
       <template v-if="customIcons?.flat().length">
-        <span class="option-grid-ctn__subtitle">Custom colors</span>
+        <span class="option-grid-ctn__subtitle">{{ t('Custom colors') }}</span>
 
         <IconGridRow :icons="customIcons" :active-color="activeColor" @select="handleSelect" />
       </template>

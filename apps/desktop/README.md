@@ -41,9 +41,15 @@ To repeat artifact verification locally after packaging, run from the repository
 powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-windows-artifacts.ps1
 ```
 
+## Language and window menus
+
+The desktop app starts in Simplified Chinese. Use **语言 / Language** to switch between Chinese and English; the preference is saved on this device. The Agent, progress messages, main editor toolbar, search, and review controls update without reloading the document or clearing edits, selection, or undo history. Document text, comments, and model suggestions keep their original language.
+
+The native window title shows the document name and an asterisk for unsaved changes. **File / 文件** below the title bar contains Open, Save, Save As, Reload, and Auto-save; **View / 视图** toggles the Agent. Keyboard shortcuts are Ctrl+O, Ctrl+S, Ctrl+Shift+S, and Ctrl+Shift+R. The browser preview uses a compact equivalent menu. There is no separate large header above the editor.
+
 ## Opening documents
 
-Use **Open** to pick a `.docx` file with the system dialog, or drag a `.docx` file from Explorer onto the window. Both routes replace the current document and ask first when there are unsaved changes. The file is read on this machine; nothing leaves it until the Agent is used.
+Use **File > Open / 文件 > 打开** to pick a `.docx` file with the system dialog, or drag a `.docx` file from Explorer onto the window. Both routes replace the current document and ask first when there are unsaved changes. The file is read on this machine; nothing leaves it until the Agent is used.
 
 ## Writing and reviewing
 

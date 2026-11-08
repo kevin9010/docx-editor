@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-import { spawnSync } from 'node:child_process';
+import { spawnPackageManagerSync } from './lib/package-manager-command.mjs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PUBLIC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-function run(command, args, { cwd, env, spawn = spawnSync, phase }) {
+function run(command, args, { cwd, env, spawn = spawnPackageManagerSync, phase }) {
   const result = spawn(command, args, { cwd, env, stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.status !== 0) {
@@ -20,7 +20,7 @@ export function packSuperDoc({
   repoRoot = path.resolve(publicRoot, '../..'),
   v2Root = path.resolve(publicRoot, '../v2'),
   env = process.env,
-  spawn = spawnSync,
+  spawn = spawnPackageManagerSync,
 } = {}) {
   const privateEngineSource = path.join(v2Root, 'src', 'superdoc', 'index.ts');
   if (existsSync(privateEngineSource)) {

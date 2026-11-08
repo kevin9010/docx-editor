@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { computed, getCurrentInstance, ref, watch, onBeforeUnmount } from 'vue';
 import type { ComponentPublicInstance, MaybeRef, PropType, Ref } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
@@ -12,6 +13,8 @@ import { refocusEditorSurface } from './toolbar-focus-helpers.js';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 import type { BuiltInToolbar, ToolbarItem, ToolbarItemOption as DropdownOption } from '../built-in-toolbar.js';
 import type { ComboBoxCommand, ComboBoxItem, ComboBoxTabOut } from './ToolbarComboBox.vue';
+
+const { t } = useUiTranslation();
 
 export type ToolbarGroupItem = Pick<
   ToolbarItem,
@@ -536,7 +539,7 @@ onBeforeUnmount(() => {
         </template>
         <div>
           {{ item.tooltip }}
-          <span v-if="item.disabled.value">(disabled)</span>
+          <span v-if="item.disabled.value">{{ t('(disabled)') }}</span>
         </div>
       </SdTooltip>
 
@@ -560,7 +563,7 @@ onBeforeUnmount(() => {
         </template>
         <div>
           {{ item.tooltip }}
-          <span v-if="item.disabled.value">(disabled)</span>
+          <span v-if="item.disabled.value">{{ t('(disabled)') }}</span>
         </div>
       </SdTooltip>
 
@@ -602,7 +605,7 @@ onBeforeUnmount(() => {
             </template>
             <div>
               {{ item.tooltip }}
-              <span v-if="item.disabled.value">(disabled)</span>
+              <span v-if="item.disabled.value">{{ t('(disabled)') }}</span>
             </div>
           </SdTooltip>
         </template>
@@ -624,7 +627,7 @@ onBeforeUnmount(() => {
         </template>
         <div v-if="item.tooltip">
           {{ item.tooltip }}
-          <span v-if="item.disabled.value">(disabled)</span>
+          <span v-if="item.disabled.value">{{ t('(disabled)') }}</span>
         </div>
       </SdTooltip>
 

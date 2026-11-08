@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { SuperDoc } from 'superdoc';
 import type { BrowserDocumentApi } from 'superdoc';
@@ -16,6 +16,9 @@ import {
   type OpenedDocument,
 } from './document/document-session';
 import AgentPanel from './AgentPanel.vue';
+import AppMenu from './AppMenu.vue';
+import { locale, setLocale, t } from './i18n';
+import type { MenuCommand, MenuState } from './window-menu';
 import type { AgentSelection } from './agent/types';
 
 const editorHost = ref<HTMLElement | null>(null);
@@ -32,6 +35,7 @@ const autoSaveEnabled = ref(true);
 const showAgent = ref(true);
 const isDragActive = ref(false);
 const agentBusy = ref(false);
+const nativeMenuReady = ref(false);
 const liveDocument = shallowRef<BrowserDocumentApi | null>(null);
 const selection = shallowRef<AgentSelection | null>(null);
 let unlistenSelection: (() => void) | null = null;
@@ -46,7 +50,19 @@ let mountGeneration = 0;
 let lastDiskModifiedAt = 0;
 
 const fileName = computed(() => openedDocument.value?.name ?? 'No document');
-const canSave = computed(() => Boolean(editor.value && openedDocument.value && !isSaving.value && !agentBusy.value));
+const canSave = computed(() => Boolean(editor.value && openedDocument.value && !isLoading.value && !isSaving.value && !agentBusy.value));
+const menuState = computed<MenuState>(() => ({ fileName: fileName.value, dirty: isDirty.value, canOpen: !isLoading.value && !isSaving.value && !agentBusy.value, canSave: canSave.value, canReload: Boolean(openedDocument.value?.path && !isLoading.value && !isSaving.value && !agentBusy.value), autoSave: autoSaveEnabled.value, agent: showAgent.value, locale: locale.value }));
+watch(locale, value => { document.documentElement.lang = value; editor.value?.ui.setLocale(value); }, { immediate: true });
+watch([fileName, isDirty, locale], () => { document.title = `${isDirty.value ? '* ' : ''}${t(fileName.value)} — SuperDoc Desktop`; }, { immediate: true });
+function menuCommand(id: MenuCommand): void {
+  if (id === 'open') { if (isTauriRuntime()) void openDocument(); else openBrowserPicker(); }
+  else if (id === 'save') void saveDocument();
+  else if (id === 'saveAs') void saveAs();
+  else if (id === 'reload') void reloadFromDisk();
+  else if (id === 'autoSave') autoSaveEnabled.value = !autoSaveEnabled.value;
+  else if (id === 'agent') showAgent.value = !showAgent.value;
+  else setLocale(id);
+}
 
 function clearError(): void {
   errorMessage.value = '';
@@ -63,7 +79,7 @@ const docxNamePattern = /\.docx$/i;
 function confirmDiscardChanges(action: string): boolean {
   if (agentBusy.value || isSaving.value || isLoading.value) return false;
   if (!isDirty.value) return true;
-  return window.confirm(`Discard unsaved changes and ${action}?`);
+  return window.confirm(t(`Discard unsaved changes and ${action}?`));
 }
 
 function getLiveDocument(): BrowserDocumentApi | null {
@@ -107,6 +123,9 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
   const nextEditor = new SuperDoc({
     selector: editorHost.value,
     ui: {
+      locale: locale.value,
+      search: true,
+      contextMenu: { menuProvider: (_context, sections) => sections.map(section => ({ ...section, items: section.items.map(item => ({ ...item, label: item.label ? t(item.label) : item.label })) })) },
       toolbar: {
         container: toolbarHost.value,
         // Adapt to the toolbar host, including window resizes.
@@ -319,7 +338,7 @@ async function saveDocument(): Promise<void> {
     const currentPath = openedDocument.value?.path ?? null;
     if (currentPath && lastDiskModifiedAt > 0) {
       const metadata = await getDocumentFileMetadata(currentPath);
-      if (metadata.modifiedAtMs > lastDiskModifiedAt + 1 && !window.confirm('The file changed on disk. Overwrite it with your current edits?')) {
+      if (metadata.modifiedAtMs > lastDiskModifiedAt + 1 && !window.confirm(t('The file changed on disk. Overwrite it with your current edits?'))) {
         status.value = 'Save cancelled because the file changed on disk.';
         return;
       }
@@ -376,7 +395,7 @@ async function saveAs(): Promise<void> {
 async function reloadFromDisk(): Promise<void> {
   const path = openedDocument.value?.path;
   if (!path || agentBusy.value || isLoading.value || isSaving.value) return;
-  if (isDirty.value && !window.confirm('Reload the file from disk and discard unsaved changes?')) return;
+  if (isDirty.value && !window.confirm(t('Reload the file from disk and discard unsaved changes?'))) return;
   isLoading.value = true;
   clearError();
   try {
@@ -423,10 +442,12 @@ function agentApplied(): void {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-    event.preventDefault();
-    void saveDocument();
-  }
+  // Native menu accelerators own these keys in the packaged app.
+  if (nativeMenuReady.value || !(event.ctrlKey || event.metaKey)) return;
+  const key = event.key.toLowerCase();
+  if (key === 's') { event.preventDefault(); menuCommand(event.shiftKey ? 'saveAs' : 'save'); }
+  else if (key === 'o') { event.preventDefault(); menuCommand('open'); }
+  else if (key === 'r' && event.shiftKey) { event.preventDefault(); menuCommand('reload'); }
 }
 
 function scrollToolbar(event: WheelEvent): void {
@@ -463,33 +484,14 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="desktop-shell">
-    <header class="app-header">
-      <div class="brand">
-        <span class="brand-mark">SD</span>
-        <div>
-          <h1>SuperDoc Desktop</h1>
-          <p>{{ fileName }}</p>
-        </div>
-      </div>
-      <div class="document-actions">
-        <button :disabled="isLoading || isSaving || agentBusy" @click="isTauriRuntime() ? openDocument() : openBrowserPicker()">Open</button>
-        <button :disabled="!canSave" class="primary" @click="saveDocument">Save</button>
-        <button :disabled="!editor || isSaving || agentBusy" @click="saveAs">Save As</button>
-        <button :disabled="!openedDocument?.path || isLoading || isSaving || agentBusy" @click="reloadFromDisk">Reload</button>
-      </div>
-      <div class="header-status" :class="{ dirty: isDirty }">
-        <span class="status-dot" />
-        <label class="autosave-toggle"><input v-model="autoSaveEnabled" type="checkbox" /> Auto-save</label>
-        {{ isDirty ? 'Unsaved' : 'Saved' }}
-      </div>
-    </header>
+    <AppMenu :state="menuState" @command="menuCommand" @native="nativeMenuReady = $event" />
 
     <section class="workspace">
       <section class="editor-pane">
         <div class="toolbar-strip">
-          <button class="toolbar-scroll" aria-label="Scroll toolbar left" @click="toolbarHost?.scrollBy({ left: -280, behavior: 'smooth' })">‹</button>
-          <div ref="toolbarHost" class="editor-toolbar" tabindex="0" aria-label="Scrollable document toolbar" @wheel="scrollToolbar" />
-          <button class="toolbar-scroll" aria-label="Scroll toolbar right" @click="toolbarHost?.scrollBy({ left: 280, behavior: 'smooth' })">›</button>
+          <button class="toolbar-scroll" :aria-label="t('Scroll toolbar left')" @click="toolbarHost?.scrollBy({ left: -280, behavior: 'smooth' })">‹</button>
+          <div ref="toolbarHost" class="editor-toolbar" tabindex="0" :aria-label="t('Scrollable document toolbar')" @wheel="scrollToolbar" />
+          <button class="toolbar-scroll" :aria-label="t('Scroll toolbar right')" @click="toolbarHost?.scrollBy({ left: 280, behavior: 'smooth' })">›</button>
         </div>
         <!--
           SuperDoc mounts its own Vue app into `editorHost` and `mountDocument`
@@ -500,26 +502,27 @@ onBeforeUnmount(() => {
         <div class="editor-area">
           <div ref="editorHost" class="editor-host" />
           <div v-if="!editor" class="empty-editor">
-            <strong>Open a Word document</strong>
-            <span>DOCX files stay local until you explicitly use the Agent or save them.</span>
-            <button class="primary" @click="isTauriRuntime() ? openDocument() : openBrowserPicker()">Choose DOCX</button>
+            <strong>{{ t('Open a Word document') }}</strong>
+            <span>{{ t('DOCX files stay local until you explicitly use the Agent or save them.') }}</span>
+            <button class="primary" @click="isTauriRuntime() ? openDocument() : openBrowserPicker()">{{ t('Choose DOCX') }}</button>
           </div>
         </div>
         <div class="status-bar">
-          <span>{{ status }}</span>
-          <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
+          <span>{{ t(status) }}</span>
+          <span v-if="errorMessage" class="error-text">{{ t(errorMessage) }}</span>
+          <span class="header-status" :class="{ dirty: isDirty }"><span class="status-dot" />{{ t(isDirty ? 'Unsaved' : 'Saved') }}</span>
         </div>
       </section>
 
       <aside class="agent-pane" :class="{ collapsed: !showAgent }">
         <button class="agent-toggle" @click="showAgent = !showAgent">
-          {{ showAgent ? 'Hide Agent' : 'Show Agent' }}
+          {{ t(showAgent ? 'Hide Agent' : 'Show Agent') }}
         </button>
         <AgentPanel v-show="showAgent" :document="liveDocument" :selection="selection" :disabled="isLoading || isSaving" @busy="agentBusy = $event" @applying="prepareAgentApply" @applied="agentApplied" />
       </aside>
     </section>
 
     <input ref="browserFileInput" class="sr-only" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="handleBrowserFile" />
-    <div v-if="isDragActive" class="drop-overlay">Drop a DOCX file to open it</div>
+    <div v-if="isDragActive" class="drop-overlay">{{ t('Drop a DOCX file to open it') }}</div>
   </main>
 </template>

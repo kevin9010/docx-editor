@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { packageManagerCommand } from '../../scripts/lib/package-manager-command.mjs';
 import {
   existsSync,
   mkdirSync,
@@ -23,8 +24,7 @@ function writeJson(path, value) {
 
 function pack(packageRoot, destination) {
   const filename = execFileSync(
-    'npm',
-    ['pack', '--silent', '--pack-destination', destination],
+    ...packageManagerCommand('npm', ['pack', '--silent', '--pack-destination', destination]),
     { cwd: packageRoot, encoding: 'utf8' },
   ).trim();
   return join(destination, filename);

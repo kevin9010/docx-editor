@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type {
   WatermarkDialogModel,
@@ -6,6 +7,8 @@ import type {
   WatermarkPageVariant,
 } from '../../public/ui/watermark-dialog-state.js';
 import { fileToDataUri, IMAGE_PICKER_ACCEPT, isSupportedImageFile } from '../../internal/toolbar/image-upload.js';
+
+const { t } = useUiTranslation();
 
 const props = withDefaults(
   defineProps<{
@@ -149,8 +152,8 @@ onBeforeUnmount(() => {
 <template>
   <form class="sd-watermark sd-dialog-content" @submit.prevent="apply">
     <header class="sd-watermark__header sd-dialog-header">
-      <h2>Watermark</h2>
-      <button type="button" class="sd-dialog-close" aria-label="Close watermark dialog" @click="close">
+      <h2>{{ t('Watermark') }}</h2>
+      <button type="button" class="sd-dialog-close" :aria-label="t('Close watermark dialog')" @click="close">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <path d="m4 4 8 8m0-8-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
         </svg>
@@ -159,29 +162,29 @@ onBeforeUnmount(() => {
     <div class="sd-watermark__body">
       <div class="sd-watermark__settings">
         <fieldset class="sd-watermark__scope" :disabled="busy">
-          <legend class="sd-watermark__sr-only">Watermark scope</legend>
+          <legend class="sd-watermark__sr-only">{{ t('Watermark scope') }}</legend>
           <label class="sd-watermark__field">
-            <span>Apply to</span>
-            <select aria-label="Apply to" :value="snapshot.sectionId ?? ''" @change="changeScope($event, 'section')">
-              <option value="">Entire document</option>
+            <span>{{ t('Apply to') }}</span>
+            <select :aria-label="t('Apply to')" :value="snapshot.sectionId ?? ''" @change="changeScope($event, 'section')">
+              <option value="">{{ t('Entire document') }}</option>
               <option v-for="section in snapshot.sections" :key="section.id" :value="section.id">
                 {{ section.label }}
               </option>
             </select>
           </label>
           <label class="sd-watermark__field">
-            <span>Page type</span>
-            <select aria-label="Page type" :value="snapshot.variant" @change="changeScope($event, 'variant')">
-              <option value="all">All applicable</option>
-              <option value="default">Default</option>
-              <option value="first">First</option>
-              <option value="even">Even</option>
+            <span>{{ t('Page type') }}</span>
+            <select :aria-label="t('Page type')" :value="snapshot.variant" @change="changeScope($event, 'variant')">
+              <option value="all">{{ t('All applicable') }}</option>
+              <option value="default">{{ t('Default') }}</option>
+              <option value="first">{{ t('First') }}</option>
+              <option value="even">{{ t('Even') }}</option>
             </select>
           </label>
         </fieldset>
 
         <fieldset v-if="snapshot.items.length > 1" class="sd-watermark__selection" :disabled="busy">
-          <legend>Watermarks to edit</legend>
+          <legend>{{ t('Watermarks to edit') }}</legend>
           <div class="sd-watermark__selection-list">
             <label v-for="item in snapshot.items" :key="item.id" class="sd-watermark__check">
               <input
@@ -195,7 +198,7 @@ onBeforeUnmount(() => {
               >
             </label>
           </div>
-          <button type="button" :disabled="!editable" @click="model.selectWatermarks([])">Add watermark</button>
+          <button type="button" :disabled="!editable" @click="model.selectWatermarks([])">{{ t('Add watermark') }}</button>
           <p v-if="snapshot.selectedIds.length > 1" class="sd-watermark__notice">
             Applying uses the settings below for all {{ snapshot.selectedIds.length }} selected copies.
           </p>
@@ -207,9 +210,9 @@ onBeforeUnmount(() => {
           :class="{ 'sd-watermark__draft--text': snapshot.draft.kind === 'text' }"
           :disabled="!editable"
         >
-          <legend class="sd-watermark__sr-only">Watermark settings</legend>
+          <legend class="sd-watermark__sr-only">{{ t('Watermark settings') }}</legend>
           <fieldset class="sd-watermark__types">
-            <legend class="sd-watermark__sr-only">Watermark type</legend>
+            <legend class="sd-watermark__sr-only">{{ t('Watermark type') }}</legend>
             <label
               v-for="type in types"
               :key="type.value"
@@ -224,32 +227,32 @@ onBeforeUnmount(() => {
               />
               <span>{{
                 type.value === 'none' && snapshot.items.length > 1 && snapshot.selectedIds.length
-                  ? 'Remove selected'
-                  : type.label
+                  ? t('Remove selected')
+                  : t(type.label)
               }}</span>
             </label>
           </fieldset>
 
           <template v-if="snapshot.draft.kind === 'text'">
             <label class="sd-watermark__field">
-              <span>Text</span>
+              <span>{{ t('Text') }}</span>
               <input
-                aria-label="Watermark text"
+                :aria-label="t('Watermark text')"
                 type="text"
                 :value="snapshot.draft.text"
                 @input="patch({ text: ($event.target as HTMLInputElement).value })"
               />
             </label>
-            <div class="sd-watermark__presets" aria-label="Text presets">
+            <div class="sd-watermark__presets" :aria-label="t('Text presets')">
               <button v-for="preset in presets" :key="preset" type="button" @click="patch({ text: preset })">
                 {{ preset }}
               </button>
             </div>
             <div class="sd-watermark__font-row">
               <label class="sd-watermark__field">
-                <span>Font</span>
+                <span>{{ t('Font') }}</span>
                 <select
-                  aria-label="Font"
+                  :aria-label="t('Font')"
                   :value="snapshot.draft.fontFamily"
                   @change="patch({ fontFamily: ($event.target as HTMLSelectElement).value })"
                 >
@@ -257,29 +260,29 @@ onBeforeUnmount(() => {
                 </select>
               </label>
               <label class="sd-watermark__field sd-watermark__size">
-                <span>Size (pt)</span>
+                <span>{{ t('Size (pt)') }}</span>
                 <input
-                  aria-label="Font size"
+                  :aria-label="t('Font size')"
                   :list="`watermark-sizes-${surfaceId}`"
-                  :value="snapshot.draft.fontSize === 'auto' ? 'Auto' : snapshot.draft.fontSize"
+                  :value="snapshot.draft.fontSize === 'auto' ? t('Auto') : snapshot.draft.fontSize"
                   @change="
                     patch({
                       fontSize:
-                        ($event.target as HTMLInputElement).value.toLowerCase() === 'auto'
+                        ['auto', t('Auto').toLowerCase()].includes(($event.target as HTMLInputElement).value.toLowerCase())
                           ? 'auto'
                           : Number(($event.target as HTMLInputElement).value),
                     })
                   "
                 />
                 <datalist :id="`watermark-sizes-${surfaceId}`">
-                  <option value="Auto" />
+                  <option :value="t('Auto')" />
                   <option v-for="size in [24, 36, 48, 72, 96]" :key="size" :value="size" />
                 </datalist>
               </label>
               <div class="sd-watermark__styles">
                 <button
                   type="button"
-                  aria-label="Bold"
+                  :aria-label="t('Bold')"
                   :aria-pressed="snapshot.draft.bold"
                   @click="patch({ bold: !snapshot.draft.bold })"
                 >
@@ -287,7 +290,7 @@ onBeforeUnmount(() => {
                 </button>
                 <button
                   type="button"
-                  aria-label="Italic"
+                  :aria-label="t('Italic')"
                   :aria-pressed="snapshot.draft.italic"
                   @click="patch({ italic: !snapshot.draft.italic })"
                 >
@@ -296,17 +299,17 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <label class="sd-watermark__field sd-watermark__font-color">
-              <span>Font color</span>
+              <span>{{ t('Font color') }}</span>
               <span class="sd-watermark__color">
                 <input
                   type="color"
-                  aria-label="Choose font color"
+                  :aria-label="t('Choose font color')"
                   :value="snapshot.draft.color"
                   @input="patch({ color: ($event.target as HTMLInputElement).value })"
                 />
                 <input
                   type="text"
-                  aria-label="Font color"
+                  :aria-label="t('Font color')"
                   :value="snapshot.draft.color"
                   spellcheck="false"
                   @input="patch({ color: ($event.target as HTMLInputElement).value })"
@@ -319,25 +322,25 @@ onBeforeUnmount(() => {
             <div class="sd-watermark__picture">
               <img v-if="snapshot.draft.src" :src="snapshot.draft.src" alt="Selected picture" />
               <div>
-                <strong>{{ snapshot.draft.pictureName || 'No picture selected' }}</strong
-                ><small>PNG or JPEG</small>
+                <strong>{{ snapshot.draft.pictureName || t('No picture selected') }}</strong
+                ><small>{{ t('PNG or JPEG') }}</small>
               </div>
               <button type="button" @click="fileInput?.click()">
-                {{ snapshot.draft.pictureName ? 'Replace picture' : 'Choose picture' }}
+                {{ t(snapshot.draft.pictureName ? 'Replace picture' : 'Choose picture') }}
               </button>
               <input
                 ref="fileInput"
                 type="file"
                 :accept="IMAGE_PICKER_ACCEPT"
-                aria-label="Choose watermark picture"
+                :aria-label="t('Choose watermark picture')"
                 hidden
                 @change="choosePicture"
               />
             </div>
             <label class="sd-watermark__field">
-              <span>Scale</span>
+              <span>{{ t('Scale') }}</span>
               <select
-                aria-label="Picture scale"
+                :aria-label="t('Picture scale')"
                 :value="snapshot.draft.customSize ? 'custom' : snapshot.draft.scalePercent"
                 @change="
                   patch({
@@ -348,8 +351,8 @@ onBeforeUnmount(() => {
                   })
                 "
               >
-                <option v-if="snapshot.draft.customSize" value="custom" disabled>Custom size retained</option>
-                <option value="auto">Auto</option>
+                <option v-if="snapshot.draft.customSize" value="custom" disabled>{{ t('Custom size retained') }}</option>
+                <option value="auto">{{ t('Auto') }}</option>
                 <option v-for="scale in [50, 100, 150, 200, 500]" :key="scale" :value="scale">{{ scale }}%</option>
               </select>
             </label>
@@ -358,19 +361,19 @@ onBeforeUnmount(() => {
                 type="checkbox"
                 :checked="snapshot.draft.lockAspectRatio"
                 @change="patch({ lockAspectRatio: ($event.target as HTMLInputElement).checked })"
-              /><span>Preserve aspect ratio</span></label
+              /><span>{{ t('Preserve aspect ratio') }}</span></label
             >
             <label class="sd-watermark__check"
               ><input
                 type="checkbox"
                 :checked="snapshot.draft.washout"
                 @change="patch({ washout: ($event.target as HTMLInputElement).checked })"
-              /><span>Washout<small>Lighten the picture's colors.</small></span></label
+              /><span>{{ t('Washout') }}<small>{{ t("Lighten the picture's colors.") }}</small></span></label
             >
           </template>
 
           <div v-if="snapshot.draft.kind !== 'none'" class="sd-watermark__field sd-watermark__transparency">
-            <label :for="`watermark-transparency-${surfaceId}`">Transparency</label>
+            <label :for="`watermark-transparency-${surfaceId}`">{{ t('Transparency') }}</label>
             <div class="sd-watermark__range">
               <input
                 :id="`watermark-transparency-${surfaceId}`"
@@ -378,7 +381,7 @@ onBeforeUnmount(() => {
                 min="0"
                 max="100"
                 step="1"
-                aria-label="Transparency"
+                :aria-label="t('Transparency')"
                 :value="snapshot.draft.transparency"
                 @input="patch({ transparency: Number(($event.target as HTMLInputElement).value) })"
               />
@@ -388,17 +391,17 @@ onBeforeUnmount(() => {
                   min="0"
                   max="100"
                   step="any"
-                  aria-label="Transparency percentage"
+                  :aria-label="t('Transparency percentage')"
                   :value="snapshot.draft.transparency"
                   @input="patch({ transparency: Number(($event.target as HTMLInputElement).value) })"
                 /><span>%</span></label
               >
             </div>
-            <small>0% opaque, 100% transparent</small>
+            <small>{{ t('0% opaque, 100% transparent') }}</small>
           </div>
 
           <fieldset v-if="snapshot.draft.kind !== 'none'" class="sd-watermark__orientation">
-            <legend>Orientation</legend>
+            <legend>{{ t('Orientation') }}</legend>
             <label v-for="orientation in ['horizontal', 'diagonal'] as const" :key="orientation">
               <input
                 type="radio"
@@ -407,10 +410,10 @@ onBeforeUnmount(() => {
                 :checked="!snapshot.draft.customOrientation && snapshot.draft.orientation === orientation"
                 @change="patch({ orientation })"
               />
-              <span>{{ orientation === 'horizontal' ? 'Horizontal' : 'Diagonal' }}</span>
+              <span>{{ t(orientation === 'horizontal' ? 'Horizontal' : 'Diagonal') }}</span>
             </label>
           </fieldset>
-          <p v-if="snapshot.draft.customPlacement" class="sd-watermark__notice">Custom placement retained.</p>
+          <p v-if="snapshot.draft.customPlacement" class="sd-watermark__notice">{{ t('Custom placement retained.') }}</p>
           <p v-if="snapshot.draft.kind === 'none'" class="sd-watermark__notice">
             {{
               snapshot.selectedIds.length
@@ -421,8 +424,8 @@ onBeforeUnmount(() => {
         </fieldset>
       </div>
 
-      <aside class="sd-watermark__preview" aria-label="Watermark preview" :aria-busy="snapshot.phase === 'previewing'">
-        <h3>Preview</h3>
+      <aside class="sd-watermark__preview" :aria-label="t('Watermark preview')" :aria-busy="snapshot.phase === 'previewing'">
+        <h3>{{ t('Preview') }}</h3>
         <div class="sd-watermark__page">
           <img
             v-if="snapshot.preview"
@@ -441,7 +444,7 @@ onBeforeUnmount(() => {
             }}
           </p>
         </div>
-        <p class="sd-watermark__caption">Preview at the selected page size</p>
+        <p class="sd-watermark__caption">{{ t('Preview at the selected page size') }}</p>
         <p class="sd-watermark__impact">{{ snapshot.impact }}</p>
         <details v-if="snapshot.impactDetails?.length" class="sd-watermark__impact-details">
           <summary>View {{ snapshot.impactDetails.length }} affected locations</summary>
@@ -453,24 +456,24 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="error || snapshot.stale" class="sd-watermark__error" role="alert">
-      <p>{{ error || 'The document changed. Review the latest state before applying.' }}</p>
+      <p>{{ t(error || 'The document changed. Review the latest state before applying.') }}</p>
       <button v-if="snapshot.stale || snapshot.error" type="button" :disabled="busy" @click="reload">
-        Review latest state
+        {{ t('Review latest state') }}
       </button>
     </div>
     <footer class="sd-watermark__footer sd-dialog-footer">
-      <p role="status" aria-live="polite">{{ status }}</p>
+      <p role="status" aria-live="polite">{{ t(status) }}</p>
       <div class="sd-watermark__actions">
-        <button type="button" class="sd-dialog-secondary" @click="close">Cancel</button>
+        <button type="button" class="sd-dialog-secondary" @click="close">{{ t('Cancel') }}</button>
         <button type="submit" class="sd-watermark__apply sd-dialog-primary" :disabled="!canApply">
           {{
-            snapshot.phase === 'applying'
+            t(snapshot.phase === 'applying'
               ? 'Applying…'
               : snapshot.draft.kind === 'none'
                 ? snapshot.items.length > 1
                   ? 'Remove selected watermark'
                   : 'Remove watermark'
-                : 'Apply watermark'
+                : 'Apply watermark')
           }}
         </button>
       </div>
