@@ -33,6 +33,8 @@ The `Desktop Windows` GitHub Actions workflow validates and packages relevant pu
 
 The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. Browser checks open a DOCX at four window widths, exercise toolbar scrolling and dropdowns beside the Agent, and verify progress and cancellation during slow provider responses. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
 
+Installer builds make up to three attempts on the same runner, preserving Tauri's downloaded WiX/NSIS tools across temporary GitHub Releases download failures. A final build failure still fails the job and prevents artifact upload.
+
 Download `superdoc-desktop-windows-<commit>` from the completed run's **Artifacts** section. It contains the `.msi`, `-setup.exe`, `-portable.zip`, and `.zip.sha256` deliverables. Extract the portable ZIP to run `SuperDoc-Desktop.exe`; the installers and portable build have the WebView2 and signing limitations described above.
 
 To repeat artifact verification locally after packaging, run from the repository root:
