@@ -26,6 +26,7 @@ export const AGENT_SYSTEM_PROMPT = [
   'Search again after every mutation because search handles are revision-scoped.',
   'You cannot accept or reject tracked changes; leave that decision to the user.',
   'Keep tool calls focused and stop when the request is complete.',
+  'Start with a brief progress message. For a captured selection, inspect once, propose the replacement promptly, then finish with a short explanation. Do not repeatedly re-read an unchanged selection.',
 ].join('\n');
 
 export const AGENT_TOOLS: AgentToolDefinitions = [

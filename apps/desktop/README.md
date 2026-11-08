@@ -31,7 +31,7 @@ The script builds the Tauri executable with `--no-bundle`, stages it with a vers
 
 The `Desktop Windows` GitHub Actions workflow validates and packages relevant pull requests and pushes to `main`. Its path filters include desktop sources, workspace packages, shared code, build scripts, and root build configuration. After the workflow is merged into the default branch, it can also be started from **Actions > Desktop Windows > Run workflow** with a selected branch.
 
-The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. A browser layout check opens a DOCX at four window widths and verifies that toolbar controls fit their host above the floating Agent while it is toggled and the window resized. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
+The job installs locked dependencies, builds SuperDoc, runs desktop type checks, tests and lint, checks Rust formatting, runs Clippy and Rust tests, and builds the MSI, NSIS installer, and portable ZIP. Browser checks open a DOCX at four window widths, exercise toolbar scrolling and dropdowns beside the Agent, and verify progress and cancellation during slow provider responses. Before upload, it checks that both installer formats exist, verifies the ZIP's SHA-256, and checks the packaged manifest's version, commit, encoding, and executable architecture.
 
 Download `superdoc-desktop-windows-<commit>` from the completed run's **Artifacts** section. It contains the `.msi`, `-setup.exe`, `-portable.zip`, and `.zip.sha256` deliverables. Extract the portable ZIP to run `SuperDoc-Desktop.exe`; the installers and portable build have the WebView2 and signing limitations described above.
 
@@ -47,11 +47,13 @@ Use **Open** to pick a `.docx` file with the system dialog, or drag a `.docx` fi
 
 ## Writing and reviewing
 
-The full-width SuperDoc toolbar stays above the editor and Agent. The Agent is a rounded card below the toolbar with its own scroll area; hiding it returns that space to the document.
+The SuperDoc toolbar stays inside the editor column and scrolls horizontally using its arrows, scrollbar, or mouse wheel. The rounded Agent card occupies the right column from toolbar level to the bottom, with its own scroll area and a matching shadow/background. Hiding it returns that space to the document.
 
-Choose **Revise**, **Polish**, **Proofread**, **Academic**, **Translate**, **Summarize**, or **Custom**. Select a passage in SuperDoc to work on that passage, or choose **Whole document**. The captured selection survives moving focus to the Agent. Translation requires a target language. Summarize returns a response without requesting a rewrite.
+Select a passage in SuperDoc to work on that passage, or choose **Whole document**. Set any optional instructions or output language, then click **Revise**, **Polish**, **Proofread**, **Academic**, **Translate**, or **Summarize** to start immediately. The captured selection survives moving focus to the Agent. Translation requires a target language. Summarize returns a response without requesting a rewrite. **Custom** selects free-form instructions; use **Generate suggestions** to run them or repeat the selected action.
 
 **Generate suggestions** reads document context and creates previews of the original and suggested text. Nothing is written by the model. **Apply as revision** creates a tracked replacement; **Add comment** creates a review comment. Use SuperDoc's own review controls to accept or reject changes. **Dismiss** leaves the document unchanged. Starting another run replaces the previous suggestion list.
+
+Progress stays at the top while the settings and suggestions scroll independently. Both connection checks and runs show the current phase, elapsed time, and an activity log. Runs also show incoming response text and tool progress. After 20 seconds without new activity, the UI explicitly reports that it is waiting; this does not claim the model has failed. **Stop** cancels immediately and keeps received text and proposals available. Codex provider retries and errors are surfaced; a run stops after two minutes of inactivity or five minutes total. Reasoning events count as activity without displaying raw reasoning. Normal generation checks the existing login but skips model discovery; the explicit connection check loads the model list.
 
 The app rejects stale document revisions and ambiguous whole-document matches. Selected-passage edits use the captured range, even if the same text occurs elsewhere. It limits a selected passage to 12,000 characters and a run to 16 suggestions; whole-document inspection is paginated. Applied Agent changes pause auto-save until the user explicitly saves. Document replacement and saving are disabled during an Agent run or application.
 
@@ -84,6 +86,7 @@ The deterministic suite tests proposal-only generation, exact selection targetin
 
 ```powershell
 $env:SUPERDOC_TEST_CODEX = 'C:/absolute/path/to/codex.exe'
+$env:SUPERDOC_TEST_ACTION = 'academic' # Optional: real Academic action on a synthetic selection.
 pnpm --filter superdoc-desktop exec vitest run src/agent/codex-live.test.ts
 ```
 

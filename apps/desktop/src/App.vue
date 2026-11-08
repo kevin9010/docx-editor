@@ -111,7 +111,7 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
         container: toolbarHost.value,
         // Adapt to the toolbar host, including window resizes.
         responsiveTo: 'container',
-        overflow: 'menu',
+        overflow: 'visible',
       },
     },
     document: file,
@@ -429,6 +429,13 @@ function handleKeydown(event: KeyboardEvent): void {
   }
 }
 
+function scrollToolbar(event: WheelEvent): void {
+  const host = toolbarHost.value;
+  if (!host || event.ctrlKey || host.scrollWidth <= host.clientWidth) return;
+  event.preventDefault();
+  host.scrollLeft += Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown);
   window.addEventListener('dragover', handleWindowDragOver);
@@ -477,9 +484,13 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div ref="toolbarHost" class="editor-toolbar" />
     <section class="workspace">
       <section class="editor-pane">
+        <div class="toolbar-strip">
+          <button class="toolbar-scroll" aria-label="Scroll toolbar left" @click="toolbarHost?.scrollBy({ left: -280, behavior: 'smooth' })">‹</button>
+          <div ref="toolbarHost" class="editor-toolbar" tabindex="0" aria-label="Scrollable document toolbar" @wheel="scrollToolbar" />
+          <button class="toolbar-scroll" aria-label="Scroll toolbar right" @click="toolbarHost?.scrollBy({ left: 280, behavior: 'smooth' })">›</button>
+        </div>
         <!--
           SuperDoc mounts its own Vue app into `editorHost` and `mountDocument`
           clears the element before every mount. Nothing here may be owned by

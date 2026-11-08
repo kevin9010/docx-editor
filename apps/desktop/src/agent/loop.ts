@@ -49,6 +49,7 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
     }
     if (options.signal?.aborted) return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn, mutated };
     const message = response.choices[0]?.message;
+    options.onActivity?.();
     if (!message) throw new Error('The model response did not contain a message.');
 
     messages.push(assistantMessage(message));
@@ -100,6 +101,7 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
       }
       if (result.status === 'applied' && result.receipt) mutated = true;
       messages.push(toolResultMessage(call.id, result));
+      options.onStatus?.(result.status === 'proposed' ? 'Suggestion ready. Waiting for the model to finish; you can stop and review now.' : result.message ?? 'Document context read.');
     }
   }
 

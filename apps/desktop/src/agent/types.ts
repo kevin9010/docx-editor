@@ -39,6 +39,7 @@ export interface AgentRunOptions {
   signal?: AbortSignal;
   onStatus?: (status: string) => void;
   onText?: (text: string) => void;
+  onActivity?: () => void;
   review?: AgentReviewSession;
 }
 

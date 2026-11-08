@@ -91,19 +91,24 @@ export class CodexClient {
   }
 }
 
-export async function connectCodex(executable = '', signal?: AbortSignal): Promise<CodexClient> {
+export async function connectCodex(executable = '', signal?: AbortSignal, onStatus?: (status: string) => void): Promise<CodexClient> {
   if (!('__TAURI_INTERNALS__' in window)) throw new Error('Local Codex is available in the desktop app. The browser preview cannot launch local programs.');
   let client: CodexClient | null = null;
   const earlyMessages: RpcMessage[] = [];
   const channel = new Channel<RpcMessage>();
   channel.onmessage = (message) => { if (client) client.receive(message); else earlyMessages.push(message); };
-  const connection = await invoke<{sessionId: string; executable: string}>('codex_start', { executable: executable || null, onEvent: channel });
+  onStatus?.('Starting the installed Codex CLI…');
+  const starting = invoke<{sessionId: string; executable: string}>('codex_start', { executable: executable || null, onEvent: channel });
+  // A process that starts after cancellation still needs to be reclaimed.
+  void starting.then((connection) => { if (signal?.aborted) return invoke('codex_stop', { sessionId: connection.sessionId }); }).catch(() => {});
+  const connection = await withAbort(starting, signal);
   client = new CodexClient({
     send: (message) => invoke('codex_send', { sessionId: connection.sessionId, message }),
     close: () => invoke('codex_stop', { sessionId: connection.sessionId }),
   }, connection.executable);
   for (const message of earlyMessages) client.receive(message);
   try {
+    onStatus?.('Codex started. Initializing the connection…');
     await withAbort(client.request('initialize', { clientInfo: { name: 'superdoc_desktop', title: 'SuperDoc Desktop', version: '0.1.0' }, capabilities: { experimentalApi: true } }), signal);
     await client.send({ method: 'initialized', params: {} });
     return client;
@@ -113,9 +118,12 @@ export async function connectCodex(executable = '', signal?: AbortSignal): Promi
   }
 }
 
-export async function inspectCodex(client: CodexClient): Promise<CodexStatus> {
+export async function inspectCodex(client: CodexClient, includeModels = true, onStatus?: (status: string) => void): Promise<CodexStatus> {
+  onStatus?.('Checking the existing Codex login…');
   const account = await client.request<{ account: unknown; requiresOpenaiAuth: boolean }>('account/read', { refreshToken: false });
   const models: CodexModel[] = [];
+  if (!includeModels) return { executable: client.executable, signedIn: Boolean(account.account) || !account.requiresOpenaiAuth, models };
+  onStatus?.('Loading available Codex models…');
   let cursor: string | null = null;
   do {
     const result: {data: CodexModel[]; nextCursor: string | null} = await client.request('model/list', { limit: 100, ...(cursor ? { cursor } : {}) });
@@ -130,6 +138,9 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
   let turnId = '';
   let toolCount = 0;
   let finished = false;
+  let lastActivity = Date.now();
+  const activity = () => { lastActivity = Date.now(); options.onActivity?.(); };
+  const status = (message: string) => { activity(); options.onStatus?.(message); };
   const toolAbort = new AbortController();
   let toolQueue = Promise.resolve();
   const messages = new Map<string, string>();
@@ -142,13 +153,34 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     finish(result('aborted', 'The Agent run was cancelled. Pending suggestions remain available for review.'));
   };
   const timeout = setTimeout(() => finish(result('failed', 'Codex exceeded the five-minute limit. Review any suggestions before trying again.')), 300_000);
+  const idleTimeout = setInterval(() => {
+    if (Date.now() - lastActivity >= 120_000) finish(result('failed', 'No Codex activity for two minutes. The run was stopped. Check the Codex provider connection or choose another model, then retry. Existing suggestions are still available.'));
+  }, 1000);
   options.signal?.addEventListener('abort', cancel, { once: true });
   const unsubscribe = client.subscribe((message) => {
     const params = message.params ?? {};
+    if (finished) return;
     if (message.method === 'bridge/closed') { finish(result('failed', String(params.message))); return; }
     if (params.threadId !== threadId) return;
-    if (message.method === 'turn/started') turnId = String((params.turn as {id?: string})?.id ?? '');
+    activity();
+    if (message.method === 'turn/started') { turnId = String((params.turn as {id?: string})?.id ?? ''); status('Codex accepted the request. Waiting for the model…'); }
+    if (message.method === 'error') {
+      const detail = String((params.error as {message?: string})?.message ?? 'Codex provider error.');
+      status(params.willRetry ? `Connection interrupted; Codex is retrying. ${detail}` : detail);
+      if (!params.willRetry) finish(result('failed', detail));
+    }
+    if (message.method === 'item/started') {
+      const item = params.item as {type?: string};
+      if (item?.type === 'reasoning') status('The model is processing your request…');
+      if (item?.type === 'agentMessage') status('Receiving the model response…');
+    }
+    if (message.method === 'thread/status/changed') {
+      const next = params.status as {type?: string; activeFlags?: string[]};
+      if (next?.type === 'systemError') finish(result('failed', 'Codex reported a system error. Check its provider connection and retry.'));
+      if (next?.activeFlags?.length) status('Codex is waiting for an external action. You can stop and retry with document-only instructions.');
+    }
     if (message.method === 'item/agentMessage/delta') {
+      options.onStatus?.('Receiving the model response…');
       const id = String(params.itemId);
       messages.set(id, (messages.get(id) ?? '') + String(params.delta ?? ''));
       options.onText?.([...messages.values()].join('\n\n'));
@@ -163,11 +195,14 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     }
   });
   client.onRequest = async (message) => {
-    if (message.method !== 'item/tool/call' || message.params?.threadId !== threadId) return client.replyUnsupported(message);
+    if (message.method !== 'item/tool/call' || message.params?.threadId !== threadId) {
+      status('Codex requested an unsupported action; only document tools are available.');
+      return client.replyUnsupported(message);
+    }
     toolQueue = toolQueue.catch(() => {}).then(async () => {
       const params = message.params!;
       const tool = String(params.tool);
-      options.onStatus?.(`Reading or proposing: ${tool}…`);
+      status(tool === 'superdoc_inspect' ? 'Reading the selected document context…' : 'Preparing a suggestion for review…');
       let output: AgentToolResult;
       try {
         output = finished || options.signal?.aborted || ++toolCount > 64
@@ -176,19 +211,21 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
       } catch (error) { output = { status: 'failed', message: error instanceof Error ? error.message : 'The document tool failed.' }; }
       if (finished || options.signal?.aborted) return;
       await client.send({ id: message.id, result: { success: ['applied', 'proposed'].includes(output.status), contentItems: [{ type: 'inputText', text: toolResultMessage(String(message.id), output).content }] } });
+      status(output.status === 'proposed' ? 'Suggestion ready. Waiting for Codex to finish; you can stop and review now.' : output.status === 'applied' ? 'Document context sent. Waiting for the model…' : `Document tool: ${output.message ?? output.status}`);
     });
-    await toolQueue;
+    try { await toolQueue; } catch (error) { finish(result('failed', error instanceof Error ? error.message : 'Could not return the document tool result to Codex.')); }
   };
   try {
     if (options.signal?.aborted) { cancel(); return await completion; }
-    options.onStatus?.('Connecting the open document to Codex…');
+    status('Creating a Codex document session…');
     if (!options.review) throw new Error('A document review session is required.');
-    const thread = await Promise.race([client.request<{thread: {id: string}}>('thread/start', {
+    const thread = await Promise.race([client.request<{thread: {id: string}; model?: string}>('thread/start', {
       ...(options.model ? { model: options.model } : {}), baseInstructions: AGENT_SYSTEM_PROMPT,
       dynamicTools: AGENT_TOOLS.map(({function: tool}) => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.parameters })),
     }), completion]);
     if ('status' in thread) return thread;
     threadId = thread.thread.id;
+    status(`Sending your instruction to ${thread.model || options.model || 'the CLI default model'}…`);
     if (finished || options.signal?.aborted) { cancel(); return await completion; }
     const turn = await Promise.race([client.request<{turn: {id: string}}>('turn/start', { threadId, input: [{type:'text', text:options.prompt}] }), completion]);
     if ('status' in turn) return turn;
@@ -201,6 +238,7 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     finished = true;
     toolAbort.abort();
     clearTimeout(timeout);
+    clearInterval(idleTimeout);
     options.signal?.removeEventListener('abort', cancel);
     unsubscribe();
     client.onRequest = null;

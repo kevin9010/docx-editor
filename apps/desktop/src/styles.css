@@ -175,7 +175,7 @@ textarea:focus {
   display: flex;
   flex: 1;
   min-height: 0;
-  background: #e2e8f0;
+  background: #111827;
 }
 
 .editor-pane {
@@ -187,7 +187,11 @@ textarea:focus {
 }
 
 .editor-toolbar {
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
   position: relative;
   z-index: 5;
   min-height: 45px;
@@ -195,6 +199,12 @@ textarea:focus {
   background: #f8fafc;
   color: #0f172a;
 }
+
+.toolbar-strip { display: flex; flex-shrink: 0; min-width: 0; background: #f8fafc; }
+.toolbar-strip .toolbar-scroll { width: 25px; padding: 0; flex-shrink: 0; border: 0; border-radius: 0; background: #f1f5f9; color: #475569; font-size: 24px; }
+.toolbar-strip .toolbar-scroll:hover { background: #e2e8f0; color: #0f172a; }
+.editor-toolbar .superdoc-toolbar { width: max-content; min-width: 100%; }
+.editor-toolbar .button-group { flex-shrink: 0; flex-wrap: nowrap; }
 
 .editor-area {
   display: flex;
@@ -278,10 +288,10 @@ textarea:focus {
   width: 360px;
   min-width: 360px;
   min-height: 0;
-  margin: 16px 16px 16px 0;
+  margin: 10px;
   border: 1px solid #334155;
   border-radius: 22px;
-  box-shadow: 0 12px 30px rgb(15 23 42 / 18%);
+  box-shadow: 0 6px 18px rgb(17 24 39 / 45%);
   background: #111827;
 }
 
@@ -308,14 +318,35 @@ textarea:focus {
 }
 
 .agent-content {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  padding: 26px 20px 20px;
+  padding: 14px 20px 20px;
   overflow: auto;
   border-radius: inherit;
 }
+
+.agent-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; border-radius: inherit; color-scheme: dark; }
+.agent-heading { flex-shrink: 0; padding: 22px 20px 10px; }
+.agent-heading h2 { margin-bottom: 6px; }
+.agent-progress { flex-shrink: 0; margin: 0 12px 8px; padding: 12px; border: 1px solid #334155; border-radius: 12px; background: #172235; font-size: 12px; }
+.progress-current { display: flex; align-items: center; gap: 8px; color: #bfdbfe; }
+.progress-current strong { flex: 1; }
+.progress-current button { padding: 5px 8px; font-size: 11px; }
+.progress-spinner { width: 13px; height: 13px; flex-shrink: 0; border: 2px solid #475569; border-top-color: #93c5fd; border-radius: 50%; animation: agent-spin 1s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .progress-spinner { animation: none; } }
+.progress-time, .progress-wait { color: #cbd5e1; margin: 7px 0 0; font-size: 11px; }
+.progress-wait { color: #fcd34d; }
+.progress-preview { margin: 8px 0 0; max-height: 52px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #e2e8f0; }
+.activity-log { margin-top: 8px; color: #94a3b8; }
+.activity-log summary { cursor: pointer; }
+.activity-log ol { padding: 0; margin: 8px 0 0; list-style: none; max-height: 100px; overflow: auto; }
+.activity-log li { display: flex; gap: 8px; margin: 5px 0; overflow-wrap: anywhere; }
+.activity-log time { color: #60a5fa; white-space: nowrap; }
+.quick-action-hint { margin: 0; font-size: 11px; color: #94a3b8; }
 
 .agent-content > * {
   flex-shrink: 0;
