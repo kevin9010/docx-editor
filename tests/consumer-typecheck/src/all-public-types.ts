@@ -41,6 +41,8 @@ import type {
   BookmarkAddress,
   BookmarkInfo,
   BorrowedSuperDocUI,
+  BrowserDocumentApi,
+  PartialBrowserDocumentApi,
   CanPerformPermissionParams,
   CollaborationConfig,
   V2CollaborationConfig,
@@ -638,3 +640,6 @@ const _real_PageBodyTarget: AssertNotAny<PageBodyTarget> = true;
 const _real_PageMetricsHandle: AssertNotAny<PageMetricsHandle> = true;
 const _real_PageMetricsPage: AssertNotAny<PageMetricsPage> = true;
 const _real_PageMetricsSnapshot: AssertNotAny<PageMetricsSnapshot> = true;
+
+const _real_BrowserDocumentApi: AssertNotAny<BrowserDocumentApi> = true;
+const _real_PartialBrowserDocumentApi: AssertNotAny<PartialBrowserDocumentApi> = true;
