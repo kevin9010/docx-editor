@@ -54,15 +54,26 @@ function endProgress(): void {
   progressTimer = null;
 }
 function stop(): void { setStatus('Stopping the current operation…'); abort?.abort(); }
-async function runAction(value: WritingAction): Promise<void> {
-  action.value = value;
-  if (value !== 'custom') await run();
-}
 
 const error = ref('');
 const output = ref('');
 const connection = ref<CodexStatus | null>(null);
 const review = ref<AgentReviewSession | null>(null);
+const proposalDrafts = ref<Record<string, string>>({});
+const actionLabel = computed(() => WRITING_ACTIONS.find(item => item.id === action.value)?.label ?? 'Custom');
+function proposalText(proposal: AgentProposal): string {
+  return proposalDrafts.value[proposal.id] ?? (proposal.action === 'replace_text' ? proposal.replacement : proposal.comment) ?? '';
+}
+function proposalEdited(proposal: AgentProposal): boolean {
+  return proposalText(proposal) !== (proposal.action === 'replace_text' ? proposal.replacement : proposal.comment);
+}
+function proposalValidation(proposal: AgentProposal): string {
+  const text = proposalText(proposal);
+  if (text.length > 16_000) return 'Keep the suggestion within 16,000 characters.';
+  if (proposal.action === 'add_comment' && !text.trim()) return 'Enter a comment before applying it.';
+  if (proposal.action === 'replace_text' && text === proposal.find) return 'The suggested text is identical to the original.';
+  return '';
+}
 let abort: AbortController | null = null;
 let client: CodexClient | null = null;
 let disposed = false;
@@ -71,6 +82,7 @@ const canRun = computed(() => Boolean(props.document && !props.disabled && !busy
 watch(() => props.selection, (selection) => { if (selection) scope.value = 'selection'; });
 watch(() => props.document, () => {
   review.value = null;
+  proposalDrafts.value = {};
   output.value = '';
   error.value = '';
   status.value = '';
@@ -130,6 +142,7 @@ async function run(): Promise<void> {
     }
     if (selection && selection.text.length > 12_000) throw new Error('Select a shorter passage (up to 12,000 characters), or choose Whole document.');
     review.value = { revision: info.revision, ...(selection ? { selection } : {}), proposals: [] };
+    proposalDrafts.value = {};
     const options = {
       document, review: review.value,
       prompt: buildWritingPrompt(action.value, instruction.value, language.value, Boolean(selection)) + (locale.value === 'zh-CN' ? '\nExplain progress and suggestions to the user in Simplified Chinese. Keep the replacement text in the original or explicitly requested output language.' : ''),
@@ -152,11 +165,14 @@ async function run(): Promise<void> {
 
 async function apply(proposal: AgentProposal): Promise<void> {
   if (!props.document || !review.value || busy.value || props.disabled) return;
+  if (proposalValidation(proposal)) return;
+  const approvedText = proposalText(proposal);
   busy.value = true;
   error.value = '';
   emit('applying');
   try {
-    await applyProposal(props.document, review.value, proposal);
+    await applyProposal(props.document, review.value, proposal, approvedText);
+    delete proposalDrafts.value[proposal.id];
     emit('applied');
     status.value = 'Applied for review. Accept or reject in SuperDoc, then save when ready.';
   } catch (reason) { error.value = errorText(reason); }
@@ -199,8 +215,8 @@ onBeforeUnmount(() => { endProgress(); disposed = true; abort?.abort(); void cli
         <label class="field-label" for="api-key">{{ t('API key') }} <span>{{ t('(session only)') }}</span></label><input id="api-key" v-model="apiKey" :disabled="busy" type="password" autocomplete="off" :placeholder="t('Not stored by the app')" />
       </div>
     </details>
-    <p class="quick-action-hint">{{ t('Click an action to run on the chosen text.') }}</p>
-    <div class="writing-actions" :aria-label="t('Writing actions')"><button v-for="item in WRITING_ACTIONS" :key="item.id" :aria-pressed="action === item.id" :disabled="busy || disabled || !document" @click="runAction(item.id)">{{ t(item.label) }}</button><button :aria-pressed="action === 'custom'" :disabled="busy" @click="action = 'custom'">{{ t('Custom') }}</button></div>
+    <p class="quick-action-hint">{{ t('Choose an action, review the scope and instructions, then confirm below to start.') }}</p>
+    <div class="writing-actions" :aria-label="t('Writing actions')"><button v-for="item in WRITING_ACTIONS" :key="item.id" :aria-pressed="action === item.id" :disabled="busy || disabled || !document" @click="action = item.id">{{ t(item.label) }}</button><button :aria-pressed="action === 'custom'" :disabled="busy" @click="action = 'custom'">{{ t('Custom') }}</button></div>
     <label class="field-label" for="agent-scope">{{ t('Work on') }}</label>
     <select id="agent-scope" v-model="scope" :disabled="busy"><option value="document">{{ t('Whole document') }}</option><option value="selection" :disabled="!selection">{{ t('Selected passage') }}</option></select>
     <blockquote v-if="scope === 'selection' && selection" class="selection-preview">{{ selection.text }}</blockquote>
@@ -209,15 +225,29 @@ onBeforeUnmount(() => { endProgress(); disposed = true; abort?.abort(); void cli
     <input id="agent-language" v-model="language" :disabled="busy" :placeholder="t(action === 'translate' ? 'E.g. English / 简体中文' : 'Keep original language')" />
     <label class="field-label" for="agent-prompt">{{ t('Instruction') }} <span v-if="action !== 'custom'">{{ t('(optional)') }}</span></label>
     <textarea id="agent-prompt" v-model="instruction" :disabled="busy" rows="3" :placeholder="t('E.g. Make the tone warmer while preserving the meaning.')" />
-    <div class="agent-controls"><button class="primary" :disabled="!canRun" @click="run">{{ t('Generate suggestions') }}</button></div>
+    <section class="run-confirmation" :aria-label="t('Review task')">
+      <strong>{{ t('Review task') }}</strong>
+      <p>{{ t(actionLabel) }} · {{ t(scope === 'selection' ? 'Selected passage' : 'Whole document') }} · {{ t(provider === 'codex' ? 'Local Codex CLI' : 'Base URL') }}</p>
+      <p>{{ t('Starting generates suggestions for your review. You can edit each suggestion before applying it.') }}</p>
+      <button class="primary" :disabled="!canRun" @click="run">{{ t('Confirm and generate suggestions') }}</button>
+    </section>
     <div v-if="output" class="agent-summary"><span class="eyebrow">{{ t('RESPONSE') }}</span><p>{{ output }}</p></div>
     <div v-if="review?.proposals.length" class="suggestions">
       <h3>{{ t(`Suggestions · ${review.proposals.length}`) }}</h3>
-      <article v-for="proposal in review.proposals" :key="proposal.id" class="suggestion" :data-state="proposal.state">
+      <article v-for="(proposal, index) in review.proposals" :key="proposal.id" class="suggestion" :data-state="proposal.state">
         <span class="eyebrow">{{ t(proposal.action === 'replace_text' ? 'REVISION' : 'COMMENT') }} · {{ t(proposal.state) }}</span>
         <label>{{ t('Original') }}</label><p class="original-text">{{ proposal.find }}</p>
-        <label>{{ t(proposal.action === 'replace_text' ? 'Suggested' : 'Comment') }}</label><p class="replacement-text">{{ proposal.replacement || proposal.comment || t('(Delete this text)') }}</p>
-        <div v-if="proposal.state === 'pending'" class="suggestion-actions"><button class="primary" :disabled="busy || disabled" @click="apply(proposal)">{{ t(proposal.action === 'replace_text' ? 'Apply as revision' : 'Add comment') }}</button><button :disabled="busy" @click="proposal.state = 'dismissed'">{{ t('Dismiss') }}</button></div>
+        <template v-if="proposal.state === 'pending'">
+          <label :for="`suggestion-${proposal.id}`">{{ t(proposal.action === 'replace_text' ? 'Suggested (editable)' : 'Comment (editable)') }}</label>
+          <textarea :id="`suggestion-${proposal.id}`" class="suggestion-editor" :aria-label="t(`${proposal.action === 'replace_text' ? 'Edit suggestion' : 'Edit comment'} ${index + 1}`)" :value="proposalText(proposal)" :disabled="busy || disabled" rows="5" maxlength="16000" @input="proposalDrafts[proposal.id] = ($event.target as HTMLTextAreaElement).value" />
+          <p class="suggestion-help">{{ t('Review and edit this text, then apply when ready.') }}<span v-if="proposal.action === 'replace_text' && !proposalText(proposal)"> {{ t('(Delete this text)') }}</span></p>
+          <div v-if="proposalEdited(proposal)" class="suggestion-draft"><span>{{ t('Edited by you') }}</span><button :disabled="busy || disabled" @click="delete proposalDrafts[proposal.id]">{{ t('Restore Agent suggestion') }}</button></div>
+          <p v-if="proposalValidation(proposal)" class="error-text">{{ t(proposalValidation(proposal)) }}</p>
+          <div class="suggestion-actions"><button class="primary" :disabled="busy || disabled || !!proposalValidation(proposal)" @click="apply(proposal)">{{ t(proposal.action === 'replace_text' ? 'Apply as revision' : 'Add comment') }}</button><button :disabled="busy" @click="proposal.state = 'dismissed'">{{ t('Dismiss') }}</button></div>
+        </template>
+        <template v-else>
+          <label>{{ t(proposal.action === 'replace_text' ? 'Suggested' : 'Comment') }}</label><p class="replacement-text">{{ proposalText(proposal) || t('(Delete this text)') }}</p>
+        </template>
         <p v-if="proposal.error" class="error-text">{{ t(proposal.error) }}</p>
       </article>
     </div>

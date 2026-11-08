@@ -458,6 +458,12 @@ textarea:focus {
 .suggestion .original-text { color: #b91c1c; }
 .suggestion .replacement-text { color: #047857; }
 .suggestion-actions { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.suggestion .suggestion-editor { margin-top: 8px; min-height: 110px; resize: vertical; font-size: 12px; line-height: 1.5; }
+.suggestion .suggestion-help { margin: 8px 0; color: var(--desktop-muted); font-size: 11px; }
+.suggestion-draft { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; color: #1d4ed8; font-size: 11px; }
+.suggestion-draft button { padding: 4px 7px; font-size: 11px; }
+.run-confirmation { padding: 12px; border: 1px solid var(--desktop-border); border-radius: 12px; background: var(--desktop-surface-muted); font-size: 12px; }
+.run-confirmation p { margin: 7px 0 10px; color: var(--desktop-secondary); line-height: 1.5; }
 .suggestion[data-state='dismissed'] { opacity: 0.6; }
 .suggestion[data-state='applied'] { border-color: #047857; }
 

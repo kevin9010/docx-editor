@@ -41,6 +41,37 @@ describe('review before changing the document', () => {
     expect(document.replace).not.toHaveBeenCalled();
   });
 
+  it('applies the reviewed wording and records it as the applied suggestion', async () => {
+    const { document, review, proposal } = fixture();
+    const approved = 'My wording,\nincluding a second line.';
+    await applyProposal(document, review, proposal, approved);
+    expect(document.replace).toHaveBeenCalledWith(expect.objectContaining({ text: approved }), { changeMode: 'tracked', expectedRevision: 'r1' });
+    expect(proposal.replacement).toBe(approved);
+    expect(proposal.state).toBe('applied');
+  });
+
+  it('applies edited comments and preserves explicit deletion as an empty replacement', async () => {
+    const { document, review, proposal } = fixture();
+    const comment: AgentProposal = { ...proposal, action: 'add_comment', comment: 'Agent comment.' };
+    await applyProposal(document, review, comment, 'My reviewed comment.');
+    expect(document.comments.create).toHaveBeenCalledWith(expect.objectContaining({ text: 'My reviewed comment.' }), { expectedRevision: 'r1' });
+    expect(comment.comment).toBe('My reviewed comment.');
+    await applyProposal(document, review, proposal, '');
+    expect(document.replace).toHaveBeenLastCalledWith(expect.objectContaining({ text: '' }), { changeMode: 'tracked', expectedRevision: 'r1x' });
+    expect(proposal.replacement).toBe('');
+  });
+
+  it('rejects invalid drafts without changing the document or discarding the Agent suggestion', async () => {
+    const { document, review, proposal } = fixture();
+    await expect(applyProposal(document, review, proposal, proposal.find)).rejects.toThrow('identical');
+    await expect(applyProposal(document, review, proposal, 'a'.repeat(16_001))).rejects.toThrow('16,000');
+    await expect(applyProposal(document, review, { ...proposal, action: 'add_comment' }, '  ')).rejects.toThrow('Enter a comment');
+    expect(proposal.replacement).toBe('Better passage.');
+    expect(proposal.state).toBe('pending');
+    expect(document.replace).not.toHaveBeenCalled();
+    expect(document.comments.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a stale document and a change during target resolution', async () => {
     const { document, review, proposal, setRevision } = fixture();
     setRevision('r2');
