@@ -37,13 +37,16 @@ test('switches the editor and Agent language without losing edits, selection or 
   await page.locator('.editor-host .superdoc-text-run').first().dblclick();
   await page.keyboard.type('Open'); // This is document content, not interface copy.
   await expect(page.locator('.header-status')).toContainText('未保存');
+  await expect(page.locator('.editor-host')).toContainText('Open');
   const before = await page.evaluate(async () => {
     const owner = [...document.querySelectorAll('*')].map(node => Reflect.get(node, '__vue_app__')?.config.globalProperties.$superdoc).find(Boolean);
     Reflect.set(window, 'localeTestOwner', owner);
     return { text: await owner.activeEditor.doc.getText({}), revision: (await owner.activeEditor.doc.info({})).revision };
   });
-  await page.locator('.editor-host .superdoc-text-run').first().dblclick();
-  await expect(page.locator('.selection-preview')).toBeVisible();
+  // Select the inserted word from its caret; a second double-click can race
+  // the worker's updated text layout and land on a different word or whitespace.
+  for (let index = 0; index < 'Open'.length; index++) await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.locator('.selection-preview')).toHaveText('Open');
   const selected = await page.locator('.selection-preview').innerText();
   await changeLanguage(page, 'English');
   await expect(page.getByRole('button', { name: 'Font family options', exact: true })).toBeVisible();
