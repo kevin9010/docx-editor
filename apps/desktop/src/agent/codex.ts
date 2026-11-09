@@ -1,6 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { AGENT_SYSTEM_PROMPT, AGENT_TOOLS, dispatchAgentTool, toolResultMessage } from './tools';
 import { withAbort } from './cancellation';
+import { codexDiagnostic, type CodexTurnError } from './codex-errors';
 import type { AgentRunOptions, AgentRunResult, AgentToolResult } from './types';
 
 export interface RpcMessage {
@@ -138,9 +139,12 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
   let turnId = '';
   let toolCount = 0;
   let finished = false;
+  let consecutiveRetries = 0;
+  const retryLimit = 5;
   let lastActivity = Date.now();
   const activity = () => { lastActivity = Date.now(); options.onActivity?.(); };
   const status = (message: string) => { activity(); options.onStatus?.(message); };
+  const modelActivity = () => { consecutiveRetries = 0; options.onDiagnostic?.(null); };
   const toolAbort = new AbortController();
   let toolQueue = Promise.resolve();
   const messages = new Map<string, string>();
@@ -165,11 +169,19 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     activity();
     if (message.method === 'turn/started') { turnId = String((params.turn as {id?: string})?.id ?? ''); status('Codex accepted the request. Waiting for the model…'); }
     if (message.method === 'error') {
-      const detail = String((params.error as {message?: string})?.message ?? 'Codex provider error.');
-      status(params.willRetry ? `Connection interrupted; Codex is retrying. ${detail}` : detail);
-      if (!params.willRetry) finish(result('failed', detail));
+      const diagnostic = codexDiagnostic((params.error as CodexTurnError) ?? {});
+      options.onDiagnostic?.(diagnostic);
+      if (params.willRetry) {
+        consecutiveRetries++;
+        status(`The model service is retrying (${consecutiveRetries}/${retryLimit}). Review the provider details below.`);
+        if (consecutiveRetries >= retryLimit) {
+          status('Stopped after five consecutive model service errors. Review the provider details below before retrying.');
+          finish(result('failed', diagnostic.detail));
+        }
+      } else finish(result('failed', diagnostic.detail));
     }
     if (message.method === 'item/started') {
+      modelActivity();
       const item = params.item as {type?: string};
       if (item?.type === 'reasoning') status('The model is processing your request…');
       if (item?.type === 'agentMessage') status('Receiving the model response…');
@@ -180,18 +192,23 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
       if (next?.activeFlags?.length) status('Codex is waiting for an external action. You can stop and retry with document-only instructions.');
     }
     if (message.method === 'item/agentMessage/delta') {
+      modelActivity();
       options.onStatus?.('Receiving the model response…');
       const id = String(params.itemId);
       messages.set(id, (messages.get(id) ?? '') + String(params.delta ?? ''));
       options.onText?.([...messages.values()].join('\n\n'));
     }
     if (message.method === 'item/completed') {
+      modelActivity();
       const item = params.item as { type?: string; id?: string; text?: string };
       if (item?.type === 'agentMessage' && item.text) { messages.set(String(item.id), item.text); options.onText?.([...messages.values()].join('\n\n')); }
     }
     if (message.method === 'turn/completed') {
-      const turn = params.turn as {status?: string; error?: {message?: string}};
-      finish(result(turn?.status === 'completed' ? 'completed' : turn?.status === 'interrupted' ? 'aborted' : 'failed', turn?.error?.message || [...messages.values()].join('\n\n') || 'Codex finished. Review the suggestions below.'));
+      const turn = params.turn as {status?: string; error?: CodexTurnError};
+      const diagnostic = turn?.error ? codexDiagnostic(turn.error) : null;
+      if (diagnostic) options.onDiagnostic?.(diagnostic);
+      else if (turn?.status === 'completed') modelActivity();
+      finish(result(turn?.status === 'completed' ? 'completed' : turn?.status === 'interrupted' ? 'aborted' : 'failed', diagnostic?.detail || [...messages.values()].join('\n\n') || 'Codex finished. Review the suggestions below.'));
     }
   });
   client.onRequest = async (message) => {
@@ -200,6 +217,7 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
       return client.replyUnsupported(message);
     }
     toolQueue = toolQueue.catch(() => {}).then(async () => {
+      modelActivity();
       const params = message.params!;
       const tool = String(params.tool);
       status(tool === 'superdoc_inspect' ? 'Reading the selected document context…' : 'Preparing a suggestion for review…');

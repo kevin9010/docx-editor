@@ -6,7 +6,7 @@ import { connectCodex, inspectCodex, runCodexAgent, type CodexClient, type Codex
 import { runDocumentAgent } from './agent/loop';
 import { applyProposal } from './agent/review';
 import { withAbort } from './agent/cancellation';
-import type { AgentDocument, AgentProposal, AgentReviewSession, AgentSelection } from './agent/types';
+import type { AgentDiagnostic, AgentDocument, AgentProposal, AgentReviewSession, AgentSelection } from './agent/types';
 
 const props = defineProps<{ document: AgentDocument | null; selection: AgentSelection | null; disabled: boolean }>();
 const emit = defineEmits<{ busy: [value: boolean]; applying: []; applied: [] }>();
@@ -56,6 +56,7 @@ function endProgress(): void {
 function stop(): void { setStatus('Stopping the current operation…'); abort?.abort(); }
 
 const error = ref('');
+const diagnostic = ref<AgentDiagnostic | null>(null);
 const output = ref('');
 const connection = ref<CodexStatus | null>(null);
 const review = ref<AgentReviewSession | null>(null);
@@ -85,6 +86,7 @@ watch(() => props.document, () => {
   proposalDrafts.value = {};
   output.value = '';
   error.value = '';
+  diagnostic.value = null;
   status.value = '';
   scope.value = 'document';
 });
@@ -111,13 +113,14 @@ async function openCodex(includeModels = false): Promise<CodexClient> {
 async function checkConnection(): Promise<void> {
   busy.value = true;
   error.value = '';
+  diagnostic.value = null;
   checking.value = true;
   beginProgress();
   setStatus('Checking installed Codex…');
   abort = new AbortController();
   try {
     await openCodex(true);
-    setStatus('Codex is ready. Your existing login and CLI settings will be used.');
+    setStatus('Codex login and model list checked. Provider availability is checked when you generate suggestions.');
   } catch (reason) { if (!abort?.signal.aborted) error.value = errorText(reason); setStatus(abort?.signal.aborted ? 'Connection check stopped.' : 'Connection check failed.'); }
   finally { await client?.close().catch(() => {}); client = null; abort = null; busy.value = false; checking.value = false; endProgress(); }
 }
@@ -128,6 +131,7 @@ async function run(): Promise<void> {
   busy.value = true;
   running.value = true;
   error.value = '';
+  diagnostic.value = null;
   output.value = '';
   beginProgress();
   setStatus('Preparing document context…');
@@ -151,13 +155,14 @@ async function run(): Promise<void> {
       signal: abort.signal,
       onStatus: setStatus,
       onActivity: markActivity,
+      onDiagnostic: (value: AgentDiagnostic | null) => { diagnostic.value = value; },
       onText: (value: string) => { markActivity(); output.value = value; },
     };
     const result = provider.value === 'codex'
       ? await runCodexAgent(await openCodex(), options)
       : await runDocumentAgent(options);
     if (result.status === 'completed' || !output.value) output.value = result.summary;
-    setStatus(result.status === 'completed' ? 'Ready for your review.' : result.status === 'aborted' ? 'Stopped. Any suggestions below can still be reviewed.' : 'The run did not complete.');
+    setStatus(result.status === 'completed' ? 'Ready for your review.' : result.status === 'aborted' ? 'Stopped. Any suggestions below can still be reviewed.' : diagnostic.value ? 'The run stopped because the model service returned errors. Review the details below.' : 'The run did not complete.');
     if (result.status === 'failed' || result.status === 'max_turns') error.value = result.summary;
   } catch (reason) { if (!abort?.signal.aborted) error.value = errorText(reason); setStatus(abort?.signal.aborted ? 'Stopped.' : 'Could not start the Agent.'); }
   finally { await client?.close().catch(() => {}); client = null; abort = null; busy.value = false; running.value = false; endProgress(); }
@@ -169,6 +174,7 @@ async function apply(proposal: AgentProposal): Promise<void> {
   const approvedText = proposalText(proposal);
   busy.value = true;
   error.value = '';
+  diagnostic.value = null;
   emit('applying');
   try {
     await applyProposal(props.document, review.value, proposal, approvedText);
@@ -194,7 +200,11 @@ onBeforeUnmount(() => { endProgress(); disposed = true; abort?.abort(); void cli
       <p v-if="running && output" class="progress-preview">{{ output.slice(-240) }}</p>
       <details class="activity-log"><summary>{{ t(`Activity · ${activityLog.length} updates`) }}</summary><ol><li v-for="(entry, index) in activityLog" :key="index"><time>+{{ Math.max(0, Math.floor((entry.at - startedAt) / 1000)) }}s</time><span>{{ t(entry.message) }}</span></li></ol></details>
     </section>
-    <div v-if="error" class="agent-error" role="alert">{{ t(error) }}</div>
+    <aside v-if="diagnostic" class="agent-error agent-diagnostic" role="alert">
+      <strong>{{ t(diagnostic.title) }}</strong><p>{{ t(diagnostic.hint) }}</p>
+      <details><summary>{{ t('Provider error details') }}</summary><pre>{{ diagnostic.detail }}</pre></details>
+    </aside>
+    <div v-if="error && !diagnostic" class="agent-error" role="alert">{{ t(error) }}</div>
     <div class="agent-content">
     <label class="field-label" for="agent-provider">{{ t('Connect with') }}</label>
     <select id="agent-provider" v-model="provider" :disabled="busy"><option value="codex">{{ t('Local Codex CLI') }}</option><option value="baseUrl">{{ t('Base URL') }}</option></select>

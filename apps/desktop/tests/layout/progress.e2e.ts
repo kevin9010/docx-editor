@@ -145,6 +145,34 @@ test('connection checks show the current stage and can be stopped without waitin
   expect(await page.evaluate(() => Reflect.get(window, 'codexTest').stops)).toBe(1);
 });
 
+test('provider concurrency errors show the underlying cause and stop after five retries', async ({ page }, testInfo) => {
+  await mockSlowCodex(page);
+  await open(page);
+  await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
+  await expect(page.locator('.agent-status-text')).toContainText('Codex accepted');
+  const failure = { message: 'Reconnecting... 1/100', additionalDetails: 'stream disconnected before completion: Concurrency limit exceeded for user, please retry later', codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: null } } };
+  await emit(page, 'error', { willRetry: true, error: failure });
+  await expect(page.getByRole('alert')).toContainText('concurrent request limit');
+  await expect(page.getByRole('alert')).toContainText('local Codex process is connected');
+  await page.getByText('Provider error details', { exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Concurrency limit exceeded');
+  // Real model progress clears a recovered error and resets the retry count.
+  await emit(page, 'item/agentMessage/delta', { itemId: 'message', delta: 'Starting the review.' });
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  for (let n = 1; n <= 5; n++) await emit(page, 'error', { willRetry: true, error: { ...failure, message: `Reconnecting... ${n}/100` } });
+  await expect(page.locator('.agent-status-text')).toContainText('run stopped');
+  await expect(page.locator('.progress-spinner')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Confirm and generate suggestions' })).toBeEnabled();
+  expect(await page.evaluate(() => Reflect.get(window, 'codexTest').stops)).toBe(1);
+  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: '简体中文', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('账号并发请求已达上限');
+  await expect(page.getByRole('alert')).toContainText('本机 Codex 进程连接正常');
+  await page.getByText('模型服务错误详情', { exact: true }).click();
+  await expect(page.getByRole('alert').locator('pre')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('codex-provider-limit.png') });
+});
+
 test('slow Base URL requests show progress and cancellation ignores a late response', async ({ page }) => {
   await page.addInitScript(() => Object.assign(window, { __TAURI_INTERNALS__: {
     transformCallback: () => 1, unregisterCallback: () => {},

@@ -109,4 +109,38 @@ describe('Codex app-server bridge client', () => {
     expect(onActivity).toHaveBeenCalled();
     expect(close).toHaveBeenCalledOnce();
   });
+
+  it('stops after five consecutive retries and retains the provider cause', async () => {
+    const close = vi.fn(async () => {});
+    const client = new CodexClient({ close, send: async (message) => {
+      if (message.method === 'thread/start') client.receive({ id: message.id, result: { thread: { id: 't' } } });
+      if (message.method === 'turn/start') {
+        client.receive({ id: message.id, result: { turn: { id: 'turn' } } });
+        for (let attempt = 1; attempt <= 5; attempt++) client.receive({ method: 'error', params: { threadId: 't', willRetry: true, error: { message: `Reconnecting... ${attempt}/100`, additionalDetails: 'Concurrency limit exceeded for user' } } });
+      }
+    } });
+    const onDiagnostic = vi.fn();
+    expect(await runCodexAgent(client, { ...options(), onDiagnostic })).toMatchObject({ status: 'failed', summary: expect.stringContaining('Concurrency limit exceeded') });
+    expect(onDiagnostic).toHaveBeenLastCalledWith(expect.objectContaining({ title: expect.stringContaining('concurrent request limit') }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('clears recovered diagnostics, resets consecutive retries, and preserves terminal error details', async () => {
+    const client = new CodexClient({ close: vi.fn(async () => {}), send: async (message) => {
+      if (message.method === 'thread/start') client.receive({ id: message.id, result: { thread: { id: 't' } } });
+      if (message.method === 'turn/start') {
+        client.receive({ id: message.id, result: { turn: { id: 'turn' } } });
+        const retry = () => client.receive({ method: 'error', params: { threadId: 't', willRetry: true, error: { message: 'Reconnecting...', additionalDetails: 'Connection reset' } } });
+        for (let n = 0; n < 4; n++) retry();
+        client.receive({ method: 'item/agentMessage/delta', params: { threadId: 't', itemId: 'answer', delta: 'Working' } });
+        for (let n = 0; n < 4; n++) retry();
+        client.receive({ method: 'turn/completed', params: { threadId: 't', turn: { status: 'failed', error: { message: 'Request failed', additionalDetails: 'Model access denied', codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 403 } } } } } });
+      }
+    } });
+    const onDiagnostic = vi.fn();
+    const result = await runCodexAgent(client, { ...options(), onDiagnostic });
+    expect(onDiagnostic).toHaveBeenCalledWith(null);
+    expect(result).toMatchObject({ status: 'failed', summary: expect.stringContaining('Model access denied') });
+    expect(onDiagnostic).toHaveBeenLastCalledWith(expect.objectContaining({ title: expect.stringContaining('authentication') }));
+  });
 });

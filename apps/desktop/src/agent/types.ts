@@ -40,7 +40,14 @@ export interface AgentRunOptions {
   onStatus?: (status: string) => void;
   onText?: (text: string) => void;
   onActivity?: () => void;
+  onDiagnostic?: (diagnostic: AgentDiagnostic | null) => void;
   review?: AgentReviewSession;
+}
+
+export interface AgentDiagnostic {
+  title: string;
+  hint: string;
+  detail: string;
 }
 
 export interface AgentRunResult {

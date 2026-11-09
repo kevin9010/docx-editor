@@ -524,3 +524,6 @@ textarea:focus {
 .status-bar .header-status { margin-left: auto; flex-shrink: 0; }
 .agent-status-text { min-width: 0; max-height: 90px; overflow: auto; overflow-wrap: anywhere; }
 .agent-panel > .agent-error { flex-shrink: 0; margin: 0 12px 8px; max-height: 110px; overflow: auto; overflow-wrap: anywhere; }
+.agent-diagnostic p { margin: 8px 0; }
+.agent-diagnostic details { margin-top: 8px; }
+.agent-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; font-size: 11px; }
