@@ -1,13 +1,13 @@
 {
   "generatedAt": "2026-09-02T00:00:00.000Z",
   "summary": {
-    "total": 315,
+    "total": 317,
     "byBucket": {
       "legacy-root": 3,
-      "supported-root": 312
+      "supported-root": 314
     },
     "byConfidence": {
-      "high": 265,
+      "high": 267,
       "medium": 50
     }
   },
@@ -3472,6 +3472,28 @@
       "rationale": "Additive host integration contract documented in editor/integration-hooks; optional load lifetime or existing page metrics facade.",
       "confidence": "high",
       "source": "integration",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "BrowserDocumentApi",
+      "bucket": "supported-root",
+      "rationale": "Complete browser document facade used by activeEditor.doc; supports synchronous and asynchronous host implementations.",
+      "confidence": "high",
+      "source": "doc-api",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "PartialBrowserDocumentApi",
+      "bucket": "supported-root",
+      "rationale": "Partial browser document facade for hosts implementing a subset of the Document API.",
+      "confidence": "high",
+      "source": "doc-api",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

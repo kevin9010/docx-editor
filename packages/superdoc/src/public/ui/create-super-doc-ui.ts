@@ -1,3 +1,4 @@
+import { uiLocale } from '../../internal/ui-i18n.js';
 import { readViewportBatch } from './viewport-batch.js';
 import { readBuiltInTrackedChangePermissionDecision } from '../../core/collaboration/permissions.js';
 import { beginInteraction, recordInteraction } from '../../internal/diagnostics/interaction-history.js';
@@ -12441,6 +12442,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   const controller: SuperDocUI = {
+    getLocale: () => uiLocale(superdoc).value,
+    setLocale(locale) {
+      if (disposed) return;
+      if (locale !== 'en' && locale !== 'zh-CN') throw new TypeError('Unsupported UI locale.');
+      uiLocale(superdoc).value = locale;
+    },
     select,
     get state() {
       return state;

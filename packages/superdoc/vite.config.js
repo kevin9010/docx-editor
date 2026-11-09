@@ -161,10 +161,14 @@ export default defineConfig(({ mode, command }) => {
       transform(code, id) {
         if (command !== 'build' || v2Resolution.mode !== 'package') return null;
         const file = id.split('?')[0];
+        // Vite hands back forward-slash ids; path.resolve keeps backslashes on
+        // Windows. Without normalizing, these entries never match there and the
+        // real Vue import is left pointing at the internal runtime shim, which
+        // then installs itself as the browser runtime and recurses forever.
         const entries = [
           path.resolve(__dirname, 'src/public/ui/vue.ts'),
           path.resolve(__dirname, 'src/core/v2-integration/browser-peer-runtime.ts'),
-        ];
+        ].map((entry) => entry.replace(/\\/g, '/'));
         if (!entries.includes(file)) return null;
         return { code: code.replace(/from (['"])vue\1/g, "from 'superdoc-entry-vue'"), map: null };
       },

@@ -1,3 +1,4 @@
+import { translateUi, uiLocale } from '../ui-i18n.js';
 /**
  * Internal rendered built-in toolbar shell (V2 toolbar parity, phase 3).
  *
@@ -621,7 +622,7 @@ export class BuiltInToolbar extends EventEmitter {
     const defaultItemsInput = {
       superToolbar: this,
       toolbarIcons: this.config.icons,
-      toolbarTexts: this.config.texts,
+      toolbarTexts: Object.fromEntries(Object.entries(this.config.texts).map(([key, value]) => [key, typeof value === 'string' ? translateUi(uiLocale(this.superdoc ?? undefined).value, value) : value])),
       toolbarFonts: this.#resolveToolbarFonts(this.config.fonts),
       hideButtons: this.config.hideButtons,
       availableWidth,

@@ -4182,6 +4182,8 @@ export interface ToolbarConfig {
  * @see {@link Config.ui}
  */
 export interface UIConfig {
+  /** Built-in UI language. Does not translate document content. Defaults to English. */
+  locale?: 'en' | 'zh-CN';
   /**
    * Built-in toolbar. Enabled by default, but a toolbar only appears once
    * `container` resolves to an element — enabling it without one creates the

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import type { PropType } from 'vue';
 import type {
@@ -10,6 +11,8 @@ import type {
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 import { isPlainObject } from '../../../helpers/object-guards.js';
 import type { CommandExecutionResult, CommandState } from '../../../public/ui/types.js';
+
+const { t } = useUiTranslation();
 
 type CommandReceipt = Exclude<CommandExecutionResult, boolean>;
 type FailedCommandReceipt = Extract<CommandReceipt, { success: false }>;
@@ -349,16 +352,16 @@ onMounted(() => {
     :aria-busy="loading || undefined"
     data-sd-page-number-menu
   >
-    <div id="sd-page-number-menu-title" class="sd-page-number-menu__title">Page numbers</div>
+    <div id="sd-page-number-menu-title" class="sd-page-number-menu__title">{{ t('Page numbers') }}</div>
 
     <div
       class="sd-page-number-menu__grid"
       role="radiogroup"
-      aria-label="Position"
+      :aria-label="t('Position')"
       :aria-disabled="!canApply || undefined"
     >
       <template v-for="(row, rowIndex) in POSITIONS" :key="row.value">
-        <div class="sd-page-number-menu__row-label" aria-hidden="true">{{ row.label }}</div>
+        <div class="sd-page-number-menu__row-label" aria-hidden="true">{{ t(row.label) }}</div>
         <button
           v-for="tile in TILES.slice(rowIndex * 3, rowIndex * 3 + 3)"
           :key="`${tile.position}-${tile.alignment}`"
@@ -368,8 +371,8 @@ onMounted(() => {
           class="sd-page-number-menu__tile"
           :class="{ 'is-selected': isTileSelected(tile) }"
           :aria-checked="isTileSelected(tile)"
-          :aria-label="tile.label"
-          :title="tile.label"
+          :aria-label="`${t(POSITIONS.find(row => row.value === tile.position)!.label)}, ${t(tile.alignment)}`"
+          :title="`${t(row.label)}, ${t(tile.alignment)}`"
           :tabindex="TILES.indexOf(tile) === focusIndex ? 0 : -1"
           :data-position="tile.position"
           :data-alignment="tile.alignment"
@@ -404,12 +407,12 @@ onMounted(() => {
         data-sd-page-number-first-page
         @change="markTouched"
       />
-      <span>Show on first page</span>
+      <span>{{ t('Show on first page') }}</span>
     </label>
 
     <div class="sd-page-number-menu__format">
       <label class="sd-page-number-menu__field">
-        <span>Format</span>
+        <span>{{ t('Format') }}</span>
         <select v-model="format" :disabled="!canApply" data-sd-page-number-format @change="markTouched">
           <option v-for="option in formatOptions" :key="option.value" :value="option.value">
             {{ option.label }}
@@ -425,7 +428,7 @@ onMounted(() => {
             data-sd-page-number-restart
             @change="markTouched"
           />
-          <span>Start at</span>
+          <span>{{ t('Start at') }}</span>
         </label>
         <input
           v-model.number="startAt"
@@ -433,7 +436,7 @@ onMounted(() => {
           min="0"
           step="1"
           inputmode="numeric"
-          aria-label="First page number"
+          :aria-label="t('First page number')"
           :disabled="!canApply || !restart"
           data-sd-page-number-start
           @input="markTouched"
@@ -443,10 +446,10 @@ onMounted(() => {
     </div>
 
     <p v-if="message" class="sd-page-number-menu__error" role="alert">
-      {{ message }}
+      {{ t(message) }}
     </p>
     <p v-else-if="unavailableNote" class="sd-page-number-menu__note" role="status">
-      {{ unavailableNote }}
+      {{ t(unavailableNote) }}
     </p>
 
     <div class="sd-page-number-menu__actions">
@@ -455,11 +458,11 @@ onMounted(() => {
         type="button"
         class="sd-page-number-menu__remove"
         :disabled="!canApply || busy"
-        aria-label="Remove page numbers"
+        :aria-label="t('Remove page numbers')"
         data-sd-page-number-remove
         @click="removePageNumbers"
       >
-        Remove
+        {{ t('Remove') }}
       </button>
       <button
         type="button"
@@ -468,7 +471,7 @@ onMounted(() => {
         data-sd-page-number-add
         @click="applyPageNumbers"
       >
-        {{ primaryLabel }}
+        {{ t(primaryLabel) }}
       </button>
     </div>
 
@@ -482,8 +485,8 @@ onMounted(() => {
       @click="insertAtCursor"
     >
       <span class="sd-page-number-menu__cursor-text">
-        <span>Insert at cursor</span>
-        <small>{{ atCursorHint }}</small>
+        <span>{{ t('Insert at cursor') }}</span>
+        <small>{{ t(atCursorHint) }}</small>
       </span>
       <kbd>{{ shortcutLabel }}</kbd>
     </button>

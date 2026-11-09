@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../../internal/ui-i18n.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -6,6 +7,8 @@ import { useCommentsStore } from '../../../stores/comments-store';
 import ReviewDirectoryListItem from './ReviewDirectoryListItem.vue';
 import type { PositionEntry, ReviewDirectoryItem } from './ReviewDirectoryListItem.vue';
 import type { CommentModel } from '../use-comment';
+
+const { t } = useUiTranslation();
 
 type FloatingInstance = {
   id: string;
@@ -249,7 +252,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="shouldShowResolvedComments">
-      <div class="comment-title">Resolved</div>
+      <div class="comment-title">{{ t('Resolved') }}</div>
       <ReviewDirectoryListItem
         v-for="(item, index) in resolvedCommentDisplayItems"
         :key="item.id"

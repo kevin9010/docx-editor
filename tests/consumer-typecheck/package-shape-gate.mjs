@@ -8,6 +8,7 @@
  */
 
 import { execFileSync, execSync, spawnSync } from 'node:child_process';
+import { packageManagerCommand } from '../../scripts/lib/package-manager-command.mjs';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,14 +28,14 @@ function run(command) {
 }
 
 function runArgs(command, args) {
-  execFileSync(command, args, {
+  execFileSync(...packageManagerCommand(command, args), {
     cwd: repoRoot,
     stdio: 'inherit',
   });
 }
 
 function runAttw(args) {
-  const result = spawnSync('pnpm', args, {
+  const result = spawnSync(...packageManagerCommand('pnpm', args), {
     cwd: repoRoot,
     encoding: 'utf8',
   });
@@ -88,7 +89,7 @@ function getCjsEntrypoints(exportsMap) {
 
 if (doPack) {
   if (internal) {
-    execFileSync('pnpm', ['run', 'pack:superdoc:internal'], {
+    execFileSync(...packageManagerCommand('pnpm', ['run', 'pack:superdoc:internal']), {
       cwd: join(repoRoot, '..', '..'),
       stdio: 'inherit',
     });

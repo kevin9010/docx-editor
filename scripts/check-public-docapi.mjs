@@ -25,6 +25,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { packageManagerCommand } from './lib/package-manager-command.mjs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -71,7 +72,7 @@ for (const [i, s] of stages.entries()) {
   console.log(`[${i + 1}/${stages.length}] ${s.name}`);
   console.log(s.blurb);
   console.log(HR);
-  const result = spawnSync(s.cmd, s.args, { cwd: s.cwd, stdio: 'inherit' });
+  const result = spawnSync(...packageManagerCommand(s.cmd, s.args), { cwd: s.cwd, stdio: 'inherit' });
   if (result.status !== 0) {
     failed = { stage: s.name, status: result.status ?? 1 };
     break;

@@ -8,6 +8,7 @@ const commentReplySessions = new WeakMap<object, CommentReplySession>();
 </script>
 
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import type { ComponentPublicInstance, PropType, Ref } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -34,6 +35,8 @@ import {
   trackedChangeRowSideGroup,
   type TrackedChangeSideGroup,
 } from '../../stores/helpers/tracked-change-thread-index.js';
+
+const { t } = useUiTranslation();
 
 type PositionBounds = { top?: number; left?: number; right?: number; bottom?: number };
 
@@ -1660,7 +1663,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
-    :aria-label="dialogAccessibleLabel"
+    :aria-label="t(dialogAccessibleLabel)"
     data-sd-part="comment-thread"
     data-editor-ui-surface
     :data-comment-instance-id="props.floatingInstanceId ?? ''"
@@ -1682,7 +1685,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
 
       <CommentHeader :config="getConfig" :comment="props.comment" :is-pending-input="true" />
 
-      <div class="new-comment-input-wrapper">
+      <div class="new-comment-input-wrapper" :style="{ '--comment-placeholder': JSON.stringify(t('Comment or add others with @')) }">
         <CommentInput
           ref="commentInput"
           :users="usersFiltered"
@@ -1693,14 +1696,14 @@ watch(isV2WriteDisabled, (isDisabled) => {
       </div>
       <p v-if="commentSaveFailure" class="tracked-change-decision-alert" role="alert">{{ commentSaveFailure }}</p>
       <div class="reply-actions">
-        <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+        <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">{{ t('Cancel') }}</button>
         <button
           class="sd-button primary reply-btn-primary"
           @click.stop.prevent="handleAddComment"
           :disabled="!hasTextContent || isSubmittingNewComment"
           :class="{ 'sd-is-disabled': !hasTextContent || isSubmittingNewComment }"
         >
-          Comment
+          {{ t('Comment') }}
         </button>
       </div>
     </template>
@@ -1772,44 +1775,44 @@ watch(isV2WriteDisabled, (isDisabled) => {
               </div>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkAdded'">
-              <span class="change-type">Added hyperlink </span>
+              <span class="change-type">{{ t('Added hyperlink ') }}</span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'hyperlinkModified'">
-              <span class="change-type">Changed hyperlink to </span>
+              <span class="change-type">{{ t('Changed hyperlink to ') }}</span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'paragraphSplit'">
-              <span class="change-type">Added new line</span>
+              <span class="change-type">{{ t('Added new line') }}</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'tableInsert'">
-              <span class="change-type">Added table</span>
+              <span class="change-type">{{ t('Added table') }}</span>
             </div>
             <div v-else-if="comment.trackedChangeDisplayType === 'tableDelete'">
-              <span class="change-type">Deleted table</span>
+              <span class="change-type">{{ t('Deleted table') }}</span>
             </div>
             <div v-else-if="comment.trackedChangeType === 'trackFormat'">
-              <span class="change-type">Format: </span>
+              <span class="change-type">{{ t('Format: ') }}</span>
               <span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
             </div>
             <div v-else-if="comment.trackedChangeType === 'both'">
-              <span class="change-type">Replaced </span>
+              <span class="change-type">{{ t('Replaced ') }}</span>
               <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
-              <span class="change-type"> with </span>
+              <span class="change-type">{{ t(' with ') }}</span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
             </div>
             <div v-else-if="comment.deletedText && comment.deletedText === '\n'">
-              <span class="change-type">Deleted line break</span>
+              <span class="change-type">{{ t('Deleted line break') }}</span>
             </div>
             <div v-else-if="comment.trackedChangeText && comment.trackedChangeText === '\n'">
-              <span class="change-type">Added line break</span>
+              <span class="change-type">{{ t('Added line break') }}</span>
             </div>
             <div v-else-if="comment.deletedText">
-              <span class="change-type">Deleted </span>
+              <span class="change-type">{{ t('Deleted ') }}</span>
               <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
             </div>
             <div v-else-if="comment.trackedChangeText">
-              <span class="change-type">Added </span>
+              <span class="change-type">{{ t('Added ') }}</span>
               <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
             </div>
             <div
@@ -1832,14 +1835,14 @@ watch(isV2WriteDisabled, (isDisabled) => {
             class="show-more-toggle"
             @click.stop.prevent="toggleTruncation"
           >
-            Show more
+            {{ t('Show more') }}
           </div>
           <div
             v-if="textExpanded && isTextOverflowing && index === 0"
             class="show-more-toggle"
             @click.stop.prevent="toggleTruncation"
           >
-            Show less
+            {{ t('Show less') }}
           </div>
         </div>
 
@@ -1853,7 +1856,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
             v-html="renderedCommentTexts.get(comment.commentId)"
           ></div>
           <div v-else class="reply-expanded">
-            <div class="reply-input-wrapper">
+            <div class="reply-input-wrapper" :style="{ '--comment-placeholder': JSON.stringify(t('Reply or add others with @')) }">
               <CommentInput
                 :ref="setEditCommentInputRef(comment.commentId)"
                 :users="[]"
@@ -1863,7 +1866,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
               />
             </div>
             <div class="reply-actions">
-              <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+              <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">{{ t('Cancel') }}</button>
               <button
                 class="sd-button primary reply-btn-primary"
                 @click.stop.prevent="handleCommentUpdate(comment)"
@@ -1871,7 +1874,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
                 :class="{ 'sd-is-disabled': !hasTextContent || isV2WriteDisabled }"
                 :data-disabled-reason="isV2WriteDisabled ? (v2WriteCapability?.reason ?? null) : null"
               >
-                Update
+                {{ t('Update') }}
               </button>
             </div>
           </div>
@@ -1880,14 +1883,14 @@ watch(isV2WriteDisabled, (isDisabled) => {
             class="show-more-toggle"
             @click.stop.prevent="toggleTruncation"
           >
-            Show more
+            {{ t('Show more') }}
           </div>
           <div
             v-if="textExpanded && isTextOverflowing && index === 0 && !isEditingThisComment(comment)"
             class="show-more-toggle"
             @click.stop.prevent="toggleTruncation"
           >
-            Show less
+            {{ t('Show less') }}
           </div>
         </div>
 
@@ -1918,7 +1921,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
           class="sd-button tracked-change-decision-alert__retry"
           @click.stop.prevent="retryTrackedChangeDecision"
         >
-          Retry
+          {{ t('Retry') }}
         </button>
       </div>
 
@@ -1933,10 +1936,10 @@ watch(isV2WriteDisabled, (isDisabled) => {
           :class="{ 'sd-is-disabled': isV2WriteDisabled }"
           :data-disabled-reason="isV2WriteDisabled ? (v2WriteCapability?.reason ?? null) : null"
         >
-          Reply or add others with @
+          {{ t('Reply or add others with @') }}
         </button>
         <div v-else class="reply-expanded">
-          <div class="reply-input-wrapper">
+          <div class="reply-input-wrapper" :style="{ '--comment-placeholder': JSON.stringify(t('Reply or add others with @')) }">
             <CommentInput
               ref="commentInput"
               :users="usersFiltered"
@@ -1946,7 +1949,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
             />
           </div>
           <div class="reply-actions">
-            <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+            <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">{{ t('Cancel') }}</button>
             <button
               class="sd-button primary reply-btn-primary"
               @click.stop.prevent="handleAddComment"
@@ -1954,7 +1957,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
               :class="{ 'sd-is-disabled': !hasTextContent || isV2WriteDisabled || isSubmittingReply }"
               :data-disabled-reason="v2ReplyDisabledReason"
             >
-              Reply
+              {{ t('Reply') }}
             </button>
           </div>
         </div>
@@ -2211,7 +2214,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
   outline: none;
 }
 .new-comment-input-wrapper :deep(.sd-editor-placeholder::before) {
-  content: 'Comment or add others with @';
+  content: var(--comment-placeholder, 'Comment or add others with @');
 }
 
 /* ── Reply pill & expanded input ── */
@@ -2274,7 +2277,7 @@ watch(isV2WriteDisabled, (isDisabled) => {
   outline: none;
 }
 .reply-input-wrapper :deep(.sd-editor-placeholder::before) {
-  content: 'Reply or add others with @';
+  content: var(--comment-placeholder, 'Reply or add others with @');
 }
 .reply-actions {
   display: flex;

@@ -1,0 +1,529 @@
+@import 'superdoc/style.css';
+
+:root {
+  color-scheme: light;
+  --desktop-background: #eef2f6;
+  --desktop-surface: #ffffff;
+  --desktop-surface-muted: #f8fafc;
+  --desktop-border: #dbe3ed;
+  --desktop-text: #243247;
+  --desktop-secondary: #475569;
+  --desktop-muted: #64748b;
+  --desktop-accent: #2563eb;
+  color: var(--desktop-text);
+  background: var(--desktop-background);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 960px;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+  background: var(--desktop-surface);
+  color: var(--desktop-secondary);
+  cursor: pointer;
+  padding: 7px 12px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: #b8c6d8;
+  background: #f1f5f9;
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--desktop-accent);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button.primary {
+  border-color: var(--desktop-accent);
+  background: var(--desktop-accent);
+  color: #ffffff;
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+  background: var(--desktop-surface);
+  color: var(--desktop-text);
+  outline: none;
+  padding: 8px 10px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--desktop-muted);
+  opacity: 1;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--desktop-accent);
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 12%);
+}
+
+.desktop-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--desktop-background);
+}
+
+.app-menu { display: flex; align-items: center; flex-shrink: 0; height: 30px; padding: 0 8px; gap: 2px; background: var(--desktop-surface-muted); border-bottom: 1px solid var(--desktop-border); z-index: 30; font-size: 12px; }
+.menu-group { position: relative; height: 100%; }
+.menu-group > button { height: 100%; padding: 3px 12px; border: 0; border-radius: 4px; background: transparent; }
+.menu-group > button[aria-expanded='true'] { background: #e2e8f0; }
+.menu-popup { position: absolute; top: 100%; left: 0; min-width: 230px; padding: 5px; border: 1px solid var(--desktop-border); border-radius: 8px; background: var(--desktop-surface); box-shadow: 0 8px 24px rgb(100 116 139 / 14%); }
+.menu-popup button { width: 100%; display: flex; justify-content: space-between; gap: 24px; padding: 8px 10px; border: 0; background: transparent; font-size: 12px; text-align: left; }
+.menu-popup button:hover:not(:disabled) { background: #f1f5f9; }
+.menu-popup kbd { color: var(--desktop-muted); font: inherit; }
+.menu-popup hr { border: 0; border-top: 1px solid var(--desktop-border); margin: 4px; }
+.window-file-name { min-width: 0; margin-left: 16px; color: var(--desktop-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.agent-title h2, .agent-description, .agent-summary p, .privacy-note { margin: 0; }
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--desktop-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.header-status.dirty {
+  color: #92400e;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #22c55e;
+}
+
+.header-status.dirty .status-dot {
+  background: #f59e0b;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--desktop-background);
+}
+
+.editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--desktop-background);
+}
+
+.editor-toolbar {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+  position: relative;
+  z-index: 5;
+  min-height: 45px;
+  border-bottom: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.toolbar-strip { display: flex; flex-shrink: 0; min-width: 0; background: #f8fafc; }
+.toolbar-strip .toolbar-scroll { width: 25px; padding: 0; flex-shrink: 0; border: 0; border-radius: 0; background: #f1f5f9; color: #475569; font-size: 24px; }
+.toolbar-strip .toolbar-scroll:hover { background: #e2e8f0; color: #0f172a; }
+.editor-toolbar .superdoc-toolbar { width: max-content; min-width: 100%; }
+.editor-toolbar .button-group { flex-shrink: 0; flex-wrap: nowrap; }
+
+.editor-area {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-host {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #e2e8f0;
+}
+
+/*
+ * SuperDoc lays its comments sidebar out as a fixed 320px flex sibling of the
+ * document layers, and the layers refuse to shrink below their content width.
+ * Left alone the pair overflows the editor column, so the sidebar spills out of
+ * this pane and lands underneath the Agent panel. Give the layers the remaining
+ * width instead; the sidebar then stays inside the editor column, and the
+ * document scales or scrolls within what is left.
+ */
+.editor-pane .editor-host .superdoc {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.editor-pane .editor-host .superdoc .superdoc__layers {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.empty-editor {
+  display: flex;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 330px;
+  transform: translate(-50%, -50%);
+  color: #475569;
+  text-align: center;
+}
+
+.empty-editor strong {
+  color: #1e293b;
+  font-size: 18px;
+}
+
+.empty-editor span {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 28px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--desktop-border);
+  background: var(--desktop-surface-muted);
+  color: var(--desktop-secondary);
+  font-size: 11px;
+}
+
+.error-text,
+.agent-error {
+  color: #b91c1c;
+}
+
+.agent-pane {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  width: 360px;
+  min-width: 360px;
+  min-height: 0;
+  margin: 10px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 22px;
+  box-shadow: 0 6px 18px rgb(100 116 139 / 12%);
+  background: var(--desktop-surface);
+}
+
+.agent-pane.collapsed {
+  width: 42px;
+  min-width: 42px;
+}
+
+.agent-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  padding: 4px 7px;
+  border-color: var(--desktop-border);
+  background: var(--desktop-surface-muted);
+  font-size: 10px;
+}
+
+.agent-pane.collapsed .agent-toggle {
+  top: 16px;
+  right: 7px;
+  writing-mode: vertical-rl;
+}
+
+.agent-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow: auto;
+  border-radius: inherit;
+}
+
+.agent-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; border-radius: inherit; scrollbar-color: #b8c6d8 var(--desktop-surface-muted); scrollbar-width: thin; }
+.agent-heading { flex-shrink: 0; padding: 22px 20px 10px; }
+.agent-heading h2 { margin-bottom: 6px; }
+.agent-progress { flex-shrink: 0; margin: 0 12px 8px; padding: 12px; border: 1px solid #dbeafe; border-radius: 12px; background: #eff6ff; font-size: 12px; }
+.progress-current { display: flex; align-items: center; gap: 8px; color: #1e40af; }
+.progress-current strong { flex: 1; }
+.progress-current button { padding: 5px 8px; font-size: 11px; }
+.progress-spinner { width: 13px; height: 13px; flex-shrink: 0; border: 2px solid #bfdbfe; border-top-color: var(--desktop-accent); border-radius: 50%; animation: agent-spin 1s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .progress-spinner { animation: none; } }
+.progress-time, .progress-wait { color: var(--desktop-secondary); margin: 7px 0 0; font-size: 11px; }
+.progress-wait { color: #92400e; }
+.progress-preview { margin: 8px 0 0; max-height: 52px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--desktop-text); }
+.activity-log { margin-top: 8px; color: var(--desktop-secondary); }
+.activity-log summary { cursor: pointer; }
+.activity-log ol { padding: 0; margin: 8px 0 0; list-style: none; max-height: 100px; overflow: auto; }
+.activity-log li { display: flex; gap: 8px; margin: 5px 0; overflow-wrap: anywhere; }
+.activity-log time { color: #1d4ed8; white-space: nowrap; }
+.quick-action-hint { margin: 0; font-size: 11px; color: var(--desktop-muted); }
+
+.agent-content > * {
+  flex-shrink: 0;
+}
+
+.agent-content textarea {
+  min-height: 80px;
+}
+
+.agent-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 48px;
+}
+
+.agent-title h2 {
+  margin-top: 3px;
+  color: var(--desktop-text);
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  color: #1d4ed8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.local-badge {
+  padding: 4px 7px;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.agent-description,
+.privacy-note {
+  color: var(--desktop-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: -6px;
+  color: var(--desktop-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.field-label span {
+  color: #64748b;
+  font-weight: 400;
+}
+
+.agent-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.agent-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.autosave-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--desktop-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.autosave-toggle input {
+  width: auto;
+  accent-color: #3b82f6;
+}
+
+.agent-status,
+.agent-summary,
+.agent-error {
+  padding: 10px;
+  border: 1px solid var(--desktop-border);
+  border-radius: 6px;
+  background: var(--desktop-surface-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.agent-status {
+  color: #1d4ed8;
+}
+
+.agent-summary {
+  color: var(--desktop-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-pane select {
+  width: 100%;
+  border: 1px solid var(--desktop-border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: var(--desktop-surface);
+  color: var(--desktop-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.agent-pane input, .agent-pane textarea, .agent-pane button { border-radius: 10px; }
+.connection-settings { color: var(--desktop-secondary); font-size: 12px; }
+.connection-settings summary { cursor: pointer; }
+.connection-path { overflow-wrap: anywhere; }
+.writing-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.writing-actions button { padding: 6px 10px; border-radius: 999px; font-size: 11px; }
+.writing-actions button[aria-pressed='true'] { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.selection-preview { max-height: 90px; overflow: auto; margin: 0; padding: 10px; border-left: 3px solid var(--desktop-accent); background: var(--desktop-surface-muted); color: var(--desktop-secondary); font-size: 12px; white-space: pre-wrap; }
+.suggestions { display: grid; gap: 12px; }
+.suggestions h3 { font-size: 13px; margin: 0; }
+.suggestion { border: 1px solid var(--desktop-border); border-radius: 14px; padding: 12px; background: var(--desktop-surface-muted); }
+.suggestion label { display: block; margin-top: 10px; color: var(--desktop-muted); font-size: 10px; }
+.suggestion p { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; font-size: 12px; line-height: 1.5; }
+.suggestion .original-text { color: #b91c1c; }
+.suggestion .replacement-text { color: #047857; }
+.suggestion-actions { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.suggestion .suggestion-editor { margin-top: 8px; min-height: 110px; resize: vertical; font-size: 12px; line-height: 1.5; }
+.suggestion .suggestion-help { margin: 8px 0; color: var(--desktop-muted); font-size: 11px; }
+.suggestion-draft { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; color: #1d4ed8; font-size: 11px; }
+.suggestion-draft button { padding: 4px 7px; font-size: 11px; }
+.run-confirmation { padding: 12px; border: 1px solid var(--desktop-border); border-radius: 12px; background: var(--desktop-surface-muted); font-size: 12px; }
+.run-confirmation p { margin: 7px 0 10px; color: var(--desktop-secondary); line-height: 1.5; }
+.suggestion[data-state='dismissed'] { opacity: 0.6; }
+.suggestion[data-state='applied'] { border-color: #047857; }
+
+.agent-summary small {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.agent-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.privacy-note {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--desktop-border);
+  font-size: 10px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/*
+ * Drop target shown while a file is dragged over the window. It must not take
+ * pointer events: the drop has to reach the elements underneath so the window
+ * listeners still see it.
+ */
+.drop-overlay {
+  display: flex;
+  position: fixed;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  z-index: 60;
+  border: 2px dashed var(--desktop-accent);
+  background: rgb(239 246 255 / 92%);
+  color: #1e40af;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .agent-pane {
+    width: 310px;
+    min-width: 310px;
+  }
+
+}
+
+.status-bar .header-status { margin-left: auto; flex-shrink: 0; }
+.agent-status-text { min-width: 0; max-height: 90px; overflow: auto; overflow-wrap: anywhere; }
+.agent-panel > .agent-error { flex-shrink: 0; margin: 0 12px 8px; max-height: 110px; overflow: auto; overflow-wrap: anywhere; }
+.agent-diagnostic p { margin: 8px 0; }
+.agent-diagnostic details { margin-top: 8px; }
+.agent-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; font-size: 11px; }
