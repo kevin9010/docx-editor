@@ -3,11 +3,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+/** Must match `DOCUMENT_PATH_HEADER` in src-tauri/src/commands.rs. */
+export const DOCUMENT_PATH_HEADER = 'x-superdoc-path';
 
 export interface OpenedDocument {
   path: string | null;
   name: string;
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
 }
 
 export interface DocumentFileMetadata {
@@ -29,11 +31,12 @@ export async function readDocumentFromPath(filePath: string): Promise<OpenedDocu
     throw new Error('Native file access is only available in the Tauri desktop runtime.');
   }
 
-  const bytes = await invoke<number[]>('read_file', { path: filePath });
+  // `read_file` answers with a binary IPC response, which arrives as an ArrayBuffer.
+  const bytes = await invoke<ArrayBuffer>('read_file', { path: filePath });
   return {
     path: filePath,
     name: fileNameFromPath(filePath),
-    data: Uint8Array.from(bytes),
+    data: new Uint8Array(bytes),
   };
 }
 
@@ -53,12 +56,13 @@ export async function chooseAndReadDocument(): Promise<OpenedDocument | null> {
   return readDocumentFromPath(selected);
 }
 
-export async function writeDocumentToPath(filePath: string, data: Uint8Array): Promise<void> {
+export async function writeDocumentToPath(filePath: string, data: Uint8Array<ArrayBuffer>): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error('Native file access is only available in the Tauri desktop runtime.');
   }
 
-  await invoke('write_file', { path: filePath, data: Array.from(data) });
+  // Send the bytes as a raw octet-stream body; JSON would encode every byte as a number.
+  await invoke('write_file', data, { headers: { [DOCUMENT_PATH_HEADER]: encodeURIComponent(filePath) } });
 }
 
 export async function chooseSavePath(defaultPath?: string | null): Promise<string | null> {
@@ -77,7 +81,7 @@ export async function chooseSavePath(defaultPath?: string | null): Promise<strin
 }
 
 export async function saveDocumentBytes(
-  data: Uint8Array,
+  data: Uint8Array<ArrayBuffer>,
   currentPath: string | null,
 ): Promise<string | null> {
   const destination = currentPath ?? (await chooseSavePath());

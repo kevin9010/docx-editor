@@ -55,9 +55,9 @@ describe('desktop document session', () => {
     );
   });
 
-  it('reads native documents and forwards byte arrays to Tauri', async () => {
+  it('reads native documents as binary IPC responses and writes raw payloads', async () => {
     useTauriRuntime();
-    invokeMock.mockResolvedValueOnce([1, 2, 3]);
+    invokeMock.mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer);
 
     await expect(readDocumentFromPath('C:\\draft.docx')).resolves.toEqual({
       path: 'C:\\draft.docx',
@@ -66,10 +66,10 @@ describe('desktop document session', () => {
     });
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: 'C:\\draft.docx' });
 
-    await writeDocumentToPath('C:\\draft.docx', new Uint8Array([4, 5]));
-    expect(invokeMock).toHaveBeenCalledWith('write_file', {
-      path: 'C:\\draft.docx',
-      data: [4, 5],
+    const payload = new Uint8Array([4, 5]);
+    await writeDocumentToPath('C:\\文档\\draft v2.docx', payload);
+    expect(invokeMock).toHaveBeenCalledWith('write_file', payload, {
+      headers: { 'x-superdoc-path': 'C%3A%5C%E6%96%87%E6%A1%A3%5Cdraft%20v2.docx' },
     });
   });
 
@@ -94,9 +94,8 @@ describe('desktop document session', () => {
     useTauriRuntime();
     invokeMock.mockResolvedValue(undefined);
     await expect(saveDocumentBytes(new Uint8Array([7]), 'C:\\draft.docx')).resolves.toBe('C:\\draft.docx');
-    expect(invokeMock).toHaveBeenCalledWith('write_file', {
-      path: 'C:\\draft.docx',
-      data: [7],
+    expect(invokeMock).toHaveBeenCalledWith('write_file', new Uint8Array([7]), {
+      headers: { 'x-superdoc-path': 'C%3A%5Cdraft.docx' },
     });
 
     saveMock.mockResolvedValueOnce('C:\\new-name');

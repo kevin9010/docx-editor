@@ -36,6 +36,8 @@ export interface AgentRunOptions {
   baseUrl: string;
   apiKey: string;
   maxTurns?: number;
+  /** Overall limit for one Codex run; defaults to five minutes. */
+  timeLimitMs?: number;
   signal?: AbortSignal;
   onStatus?: (status: string) => void;
   onText?: (text: string) => void;

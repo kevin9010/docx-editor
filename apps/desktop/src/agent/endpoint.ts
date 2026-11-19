@@ -1,5 +1,11 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import type { ChatCompletionMessageParam, ChatCompletionResponse, ChatCompletionTool } from './wire-types';
+
+/** Progress the native gateway reports while it reads a streamed reply. */
+export type ChatCompletionStreamEvent =
+  | { type: 'delta'; content: string }
+  | { type: 'tool'; name: string }
+  | { type: 'activity' };
 
 export interface ChatCompletionRequest {
   baseUrl: string;
@@ -39,7 +45,10 @@ export function normalizeChatCompletionUrl(baseUrl: string): string {
   return parsed.toString().replace(/\/+$/, '');
 }
 
-export async function requestChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+export async function requestChatCompletion(
+  request: ChatCompletionRequest,
+  onEvent?: (event: ChatCompletionStreamEvent) => void,
+): Promise<ChatCompletionResponse> {
   if (!request.apiKey.trim()) throw new Error('An API key is required to run the Agent.');
   if (!request.model.trim()) throw new Error('A model name is required to run the Agent.');
 
@@ -47,6 +56,8 @@ export async function requestChatCompletion(request: ChatCompletionRequest): Pro
     throw new Error('The model gateway is available from the Tauri desktop runtime only.');
   }
 
+  const channel = new Channel<ChatCompletionStreamEvent>();
+  channel.onmessage = (event) => onEvent?.(event);
   const response = await invoke<ChatCompletionResponse>('chat_completion', {
     request: {
       ...request,
@@ -54,6 +65,7 @@ export async function requestChatCompletion(request: ChatCompletionRequest): Pro
       model: request.model.trim(),
       apiKey: request.apiKey,
     },
+    onEvent: channel,
   });
 
   if (!response.choices?.[0]?.message) {

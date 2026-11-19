@@ -33,7 +33,7 @@ describe('Codex app-server bridge client', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it('dispatches dynamic document tools, streams text and ends a completed turn', async () => {
+  it('dispatches dynamic document tools, streams text and keeps the process for the next run', async () => {
     const sent: RpcMessage[] = [];
     const close = vi.fn(async () => {});
     const client = new CodexClient({ close, send: async (message) => {
@@ -55,6 +55,43 @@ describe('Codex app-server bridge client', () => {
     expect(onText).toHaveBeenCalledWith('Reviewed.');
     expect(sent.find((message) => message.id === 'call-1')?.result).toMatchObject({ success: true, contentItems: [{ type: 'inputText', text: expect.stringContaining('Fictional sentence.') }] });
     expect(sent.find((message) => message.method === 'thread/start')?.params).not.toHaveProperty('model');
+    expect(sent.find((message) => message.method === 'thread/unsubscribe')?.params).toEqual({ threadId: 'thread' });
+    expect(close).not.toHaveBeenCalled();
+    expect(client.isClosed).toBe(false);
+    await client.close();
+  });
+
+  it('appends streamed deltas and joins separate agent messages', async () => {
+    const client = new CodexClient({ close: vi.fn(async () => {}), send: async (message) => {
+      if (message.method === 'thread/start') client.receive({ id: message.id, result: { thread: { id: 't' } } });
+      if (message.method === 'turn/start') {
+        client.receive({ id: message.id, result: { turn: { id: 'turn' } } });
+        for (const delta of ['Fir', 'st']) client.receive({ method: 'item/agentMessage/delta', params: { threadId: 't', itemId: 'a', delta } });
+        client.receive({ method: 'item/agentMessage/delta', params: { threadId: 't', itemId: 'b', delta: 'Second' } });
+        client.receive({ method: 'item/agentMessage/delta', params: { threadId: 't', itemId: 'a', delta: '!' } });
+        client.receive({ method: 'turn/completed', params: { threadId: 't', turn: { status: 'completed' } } });
+      }
+    } });
+    const onText = vi.fn();
+    const result = await runCodexAgent(client, { ...options(), onText });
+    expect(onText.mock.calls.map(([text]) => text)).toEqual(['Fir', 'First', 'First\n\nSecond', 'First!\n\nSecond']);
+    expect(result.summary).toBe('First!\n\nSecond');
+    await client.close();
+  });
+
+  it('uses the caller time limit and closes the process after a timeout', async () => {
+    vi.useFakeTimers();
+    const close = vi.fn(async () => {});
+    const client = new CodexClient({ close, send: async (message) => {
+      if (message.method === 'thread/start') client.receive({ id: message.id, result: { thread: { id: 't' } } });
+      if (message.method === 'turn/start') client.receive({ id: message.id, result: { turn: { id: 'turn' } } });
+    } });
+    const run = runCodexAgent(client, { ...options(), timeLimitMs: 60_000, onActivity: () => {} });
+    for (let second = 0; second < 61; second += 30) {
+      client.receive({ method: 'item/started', params: { threadId: 't', item: { type: 'reasoning' } } });
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+    expect((await run).summary).toContain('1-minute limit');
     expect(close).toHaveBeenCalledOnce();
   });
 

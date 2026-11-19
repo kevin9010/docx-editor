@@ -1,9 +1,10 @@
-import { requestChatCompletion } from './endpoint';
+import { requestChatCompletion, type ChatCompletionStreamEvent } from './endpoint';
 import { withAbort } from './cancellation';
 import { dispatchAgentTool, AGENT_SYSTEM_PROMPT, AGENT_TOOLS, toolResultMessage } from './tools';
 import type { AgentAssistantMessage, AgentMessages, AgentRunOptions, AgentRunResult } from './types';
 
 const DEFAULT_MAX_TURNS = 8;
+const MAX_TURNS_LIMIT = 24;
 const MAX_TOOL_CALLS_PER_TURN = 4;
 
 function assistantMessage(message: AgentAssistantMessage): AgentMessages[number] {
@@ -15,7 +16,7 @@ function assistantMessage(message: AgentAssistantMessage): AgentMessages[number]
 }
 
 export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentRunResult> {
-  const maxTurns = Math.max(1, Math.min(options.maxTurns ?? DEFAULT_MAX_TURNS, 16));
+  const maxTurns = Math.max(1, Math.min(options.maxTurns ?? DEFAULT_MAX_TURNS, MAX_TURNS_LIMIT));
   const messages: AgentMessages = [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
     { role: 'user', content: options.prompt },
@@ -28,6 +29,23 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
     }
     options.onStatus?.(`Asking the model (turn ${turn}/${maxTurns})…`);
 
+    let streamed = '';
+    let receiving = false;
+    const onEvent = (event: ChatCompletionStreamEvent) => {
+      if (options.signal?.aborted) return;
+      options.onActivity?.();
+      if (event.type === 'delta') {
+        streamed += event.content;
+        if (!receiving) {
+          receiving = true;
+          options.onStatus?.('Receiving the model response…');
+        }
+        options.onText?.(streamed);
+      } else if (event.type === 'tool') {
+        options.onStatus?.(`The model is preparing ${event.name}…`);
+      }
+    };
+
     let response: Awaited<ReturnType<typeof requestChatCompletion>>;
     try {
       response = await withAbort(requestChatCompletion({
@@ -38,7 +56,7 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
         tools: AGENT_TOOLS,
         temperature: 0.1,
         maxTokens: 6000,
-      }), options.signal);
+      }, onEvent), options.signal);
     } catch (error) {
       return {
         status: options.signal?.aborted ? 'aborted' : 'failed',
@@ -53,7 +71,7 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
     if (!message) throw new Error('The model response did not contain a message.');
 
     messages.push(assistantMessage(message));
-    if (message.content) options.onText?.(message.content);
+    if (message.content && message.content !== streamed) options.onText?.(message.content);
     const calls = message.tool_calls ?? [];
     if (calls.length === 0) {
       return {
@@ -105,9 +123,11 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
     }
   }
 
+  const suggestions = options.review?.proposals.length ?? 0;
   return {
     status: 'max_turns',
-    summary: `The Agent stopped after ${maxTurns} turns. Review any tracked changes before continuing.`,
+    summary: `The Agent used all ${maxTurns} turns before finishing. ${suggestions} suggestion(s) are ready for review; `
+      + 'run it again for the remaining text or select a smaller passage.',
     turns: maxTurns,
     mutated,
   };

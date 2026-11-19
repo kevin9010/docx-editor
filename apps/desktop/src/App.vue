@@ -93,12 +93,6 @@ function setDocumentState(document: OpenedDocument): void {
   lastDiskModifiedAt = 0;
 }
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  return copy.buffer;
-}
-
 async function mountDocument(document: OpenedDocument): Promise<void> {
   if (!editorHost.value || !toolbarHost.value) throw new Error('The editor surface is not mounted.');
 
@@ -119,7 +113,7 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
   clearError();
   status.value = `Loading ${document.name}…`;
 
-  const file = new File([toArrayBuffer(document.data)], document.name, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  const file = new File([document.data], document.name, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const nextEditor = new SuperDoc({
     selector: editorHost.value,
     ui: {
@@ -305,15 +299,15 @@ function handleWindowDrop(event: DragEvent): void {
   if (file) void openDroppedDocument(file.name, () => readBrowserFile(file));
 }
 
-async function exportCurrentDocument(): Promise<Uint8Array> {
+async function exportCurrentDocument(): Promise<Uint8Array<ArrayBuffer>> {
   if (!editor.value) throw new Error('No document is open.');
   const blob = await editor.value.export({ exportType: ['docx'], triggerDownload: false, commentsType: 'external' });
   if (!blob) throw new Error('SuperDoc did not return an exported DOCX.');
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-function downloadDocument(bytes: Uint8Array): void {
-  const url = URL.createObjectURL(new Blob([toArrayBuffer(bytes)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+function downloadDocument(bytes: Uint8Array<ArrayBuffer>): void {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName.value || 'document.docx';
@@ -409,13 +403,21 @@ async function reloadFromDisk(): Promise<void> {
   }
 }
 
+/** Each auto-save exports the whole document, so wait longer between saves of large files. */
+function autoSaveDelay(byteLength: number): number {
+  if (byteLength > 20 * 1024 * 1024) return 8000;
+  if (byteLength > 5 * 1024 * 1024) return 4000;
+  if (byteLength > 1024 * 1024) return 2000;
+  return 1200;
+}
+
 function scheduleAutoSave(): void {
   if (!autoSaveEnabled.value || !isTauriRuntime() || !openedDocument.value?.path) return;
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
     if (!suppressAutoSave && autoSaveEnabled.value) void saveDocument();
-  }, 1200);
+  }, autoSaveDelay(openedDocument.value.data.byteLength));
 }
 
 async function pollDiskChanges(): Promise<void> {

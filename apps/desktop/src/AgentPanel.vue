@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { locale, t } from './i18n';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { WRITING_ACTIONS, buildWritingPrompt, type WritingAction } from './agent/actions';
+import { WRITING_ACTIONS, agentRunBudget, buildWritingPrompt, type WritingAction } from './agent/actions';
 import { connectCodex, inspectCodex, runCodexAgent, type CodexClient, type CodexStatus } from './agent/codex';
 import { runDocumentAgent } from './agent/loop';
 import { applyProposal } from './agent/review';
@@ -55,6 +55,21 @@ function endProgress(): void {
 }
 function stop(): void { setStatus('Stopping the current operation…'); abort?.abort(); }
 
+// Streamed replies can deliver dozens of deltas per second; render at most once per frame.
+let pendingOutput: string | null = null;
+let outputFrame = 0;
+function flushOutput(): void {
+  if (outputFrame) cancelAnimationFrame(outputFrame);
+  outputFrame = 0;
+  if (pendingOutput !== null) output.value = pendingOutput;
+  pendingOutput = null;
+}
+function showOutput(value: string): void {
+  markActivity();
+  pendingOutput = value;
+  if (!outputFrame) outputFrame = requestAnimationFrame(flushOutput);
+}
+
 const error = ref('');
 const diagnostic = ref<AgentDiagnostic | null>(null);
 const output = ref('');
@@ -76,8 +91,29 @@ function proposalValidation(proposal: AgentProposal): string {
   return '';
 }
 let abort: AbortController | null = null;
-let client: CodexClient | null = null;
 let disposed = false;
+
+// A connected Codex process is kept warm between runs so each run skips process
+// start-up and the initialize handshake. It is closed after a quiet period, when
+// the provider or executable changes, and when the panel unmounts.
+const CODEX_IDLE_CLOSE_MS = 10 * 60_000;
+let codex: CodexClient | null = null;
+let codexExecutable = '';
+let codexIdleTimer: ReturnType<typeof setTimeout> | null = null;
+function clearCodexIdleTimer(): void {
+  if (codexIdleTimer) clearTimeout(codexIdleTimer);
+  codexIdleTimer = null;
+}
+async function closeCodex(): Promise<void> {
+  clearCodexIdleTimer();
+  const current = codex;
+  codex = null;
+  await current?.close().catch(() => {});
+}
+function scheduleCodexIdleClose(): void {
+  clearCodexIdleTimer();
+  if (codex && !codex.isClosed) codexIdleTimer = setTimeout(() => { void closeCodex(); }, CODEX_IDLE_CLOSE_MS);
+}
 const canRun = computed(() => Boolean(props.document && !props.disabled && !busy.value &&
   (action.value !== 'custom' || instruction.value.trim()) && (scope.value !== 'selection' || props.selection)));
 watch(() => props.selection, (selection) => { if (selection) scope.value = 'selection'; });
@@ -91,23 +127,48 @@ watch(() => props.document, () => {
   scope.value = 'document';
 });
 watch(busy, (value) => emit('busy', value), { flush: 'sync' });
-watch([provider, executable, codexModel, baseUrl, model], () => {
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+function persistSettings(): void {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = null;
   for (const [key, value] of Object.entries({ provider: provider.value, codexPath: executable.value.trim(), codexModel: codexModel.value, baseUrl: baseUrl.value.trim(), model: model.value.trim() })) {
     localStorage.setItem(`superdoc.desktop.${key}`, value);
   }
+}
+watch([provider, executable, codexModel, baseUrl, model], () => {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistSettings, 300);
 });
-watch(executable, () => { connection.value = null; });
+watch(executable, () => { connection.value = null; void closeCodex(); });
+watch(provider, (value) => { if (value !== 'codex') void closeCodex(); });
 
 function errorText(reason: unknown): string { return reason instanceof Error ? reason.message : String(reason); }
 
 async function openCodex(includeModels = false): Promise<CodexClient> {
-  const connected = await connectCodex(executable.value.trim(), abort?.signal, setStatus);
-  client = connected;
-  if (disposed || abort?.signal.aborted) { await connected.close(); throw new Error('Cancelled.'); }
-  const inspected = await withAbort(inspectCodex(connected, includeModels, setStatus), abort?.signal);
-  connection.value = { ...inspected, models: includeModels ? inspected.models : connection.value?.models ?? [] };
-  if (!connection.value.signedIn) throw new Error('Codex is not signed in. Run codex login in your terminal, then check the connection again.');
-  return connected;
+  clearCodexIdleTimer();
+  const path = executable.value.trim();
+  const warm = codex && !codex.isClosed && codexExecutable === path ? codex : null;
+  if (warm && !includeModels) {
+    setStatus('Reusing the running Codex connection…');
+    return warm;
+  }
+  try {
+    let connected = warm;
+    if (!connected) {
+      await closeCodex();
+      connected = await connectCodex(path, abort?.signal, setStatus);
+      codex = connected;
+      codexExecutable = path;
+    }
+    if (disposed || abort?.signal.aborted) throw new Error('Cancelled.');
+    const inspected = await withAbort(inspectCodex(connected, includeModels, setStatus), abort?.signal);
+    connection.value = { ...inspected, models: includeModels ? inspected.models : connection.value?.models ?? [] };
+    if (!connection.value.signedIn) throw new Error('Codex is not signed in. Run codex login in your terminal, then check the connection again.');
+    return connected;
+  } catch (reason) {
+    await closeCodex();
+    throw reason;
+  }
 }
 
 async function checkConnection(): Promise<void> {
@@ -122,7 +183,7 @@ async function checkConnection(): Promise<void> {
     await openCodex(true);
     setStatus('Codex login and model list checked. Provider availability is checked when you generate suggestions.');
   } catch (reason) { if (!abort?.signal.aborted) error.value = errorText(reason); setStatus(abort?.signal.aborted ? 'Connection check stopped.' : 'Connection check failed.'); }
-  finally { await client?.close().catch(() => {}); client = null; abort = null; busy.value = false; checking.value = false; endProgress(); }
+  finally { scheduleCodexIdleClose(); abort = null; busy.value = false; checking.value = false; endProgress(); }
 }
 
 async function run(): Promise<void> {
@@ -145,9 +206,12 @@ async function run(): Promise<void> {
       throw new Error('The selection changed or expired. Select the passage again before running the Agent.');
     }
     if (selection && selection.text.length > 12_000) throw new Error('Select a shorter passage (up to 12,000 characters), or choose Whole document.');
+    persistSettings();
+    const characters = selection ? selection.text.length : (await withAbort(Promise.resolve(document.getText({})), abort.signal)).length;
     review.value = { revision: info.revision, ...(selection ? { selection } : {}), proposals: [] };
     proposalDrafts.value = {};
     const options = {
+      ...agentRunBudget(characters),
       document, review: review.value,
       prompt: buildWritingPrompt(action.value, instruction.value, language.value, Boolean(selection)) + (locale.value === 'zh-CN' ? '\nExplain progress and suggestions to the user in Simplified Chinese. Keep the replacement text in the original or explicitly requested output language.' : ''),
       baseUrl: baseUrl.value, apiKey: apiKey.value,
@@ -156,16 +220,17 @@ async function run(): Promise<void> {
       onStatus: setStatus,
       onActivity: markActivity,
       onDiagnostic: (value: AgentDiagnostic | null) => { diagnostic.value = value; },
-      onText: (value: string) => { markActivity(); output.value = value; },
+      onText: showOutput,
     };
     const result = provider.value === 'codex'
       ? await runCodexAgent(await openCodex(), options)
       : await runDocumentAgent(options);
+    flushOutput();
     if (result.status === 'completed' || !output.value) output.value = result.summary;
     setStatus(result.status === 'completed' ? 'Ready for your review.' : result.status === 'aborted' ? 'Stopped. Any suggestions below can still be reviewed.' : diagnostic.value ? 'The run stopped because the model service returned errors. Review the details below.' : 'The run did not complete.');
     if (result.status === 'failed' || result.status === 'max_turns') error.value = result.summary;
   } catch (reason) { if (!abort?.signal.aborted) error.value = errorText(reason); setStatus(abort?.signal.aborted ? 'Stopped.' : 'Could not start the Agent.'); }
-  finally { await client?.close().catch(() => {}); client = null; abort = null; busy.value = false; running.value = false; endProgress(); }
+  finally { flushOutput(); scheduleCodexIdleClose(); abort = null; busy.value = false; running.value = false; endProgress(); }
 }
 
 async function apply(proposal: AgentProposal): Promise<void> {
@@ -185,7 +250,14 @@ async function apply(proposal: AgentProposal): Promise<void> {
   finally { busy.value = false; }
 }
 
-onBeforeUnmount(() => { endProgress(); disposed = true; abort?.abort(); void client?.close().catch(() => {}); });
+onBeforeUnmount(() => {
+  endProgress();
+  disposed = true;
+  abort?.abort();
+  if (outputFrame) cancelAnimationFrame(outputFrame);
+  if (persistTimer) persistSettings();
+  void closeCodex();
+});
 </script>
 
 <template>

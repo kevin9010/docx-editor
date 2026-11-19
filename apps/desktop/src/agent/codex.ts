@@ -30,6 +30,9 @@ export class CodexClient {
 
   constructor(private transport: Transport, readonly executable = '') {}
 
+  /** True once the process disconnected or the client was closed; a closed client cannot be reused. */
+  get isClosed(): boolean { return this.closed; }
+
   receive(message: RpcMessage): void {
     if (this.closed) return;
     if (message.method === 'bridge/closed') {
@@ -134,6 +137,13 @@ export async function inspectCodex(client: CodexClient, includeModels = true, on
   return { executable: client.executable, signedIn: Boolean(account.account) || !account.requiresOpenaiAuth, models };
 }
 
+const DEFAULT_TIME_LIMIT_MS = 300_000;
+
+/**
+ * Run one document turn on a connected client. A completed run releases its
+ * ephemeral thread and leaves the process running for the next run; any other
+ * outcome closes the client, because the process state is no longer known.
+ */
 export async function runCodexAgent(client: CodexClient, options: AgentRunOptions): Promise<AgentRunResult> {
   let threadId = '';
   let turnId = '';
@@ -148,6 +158,17 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
   const toolAbort = new AbortController();
   let toolQueue = Promise.resolve();
   const messages = new Map<string, string>();
+  // Streamed deltas usually extend the newest message, so append to the joined
+  // text instead of re-joining every message on each delta.
+  let combined = '';
+  let lastKey = '';
+  const setMessage = (id: string, text: string, append: boolean) => {
+    const known = messages.has(id);
+    messages.set(id, append ? (messages.get(id) ?? '') + text : text);
+    if (!known) lastKey = id;
+    combined = append && known && id === lastKey ? combined + text : [...messages.values()].join('\n\n');
+    options.onText?.(combined);
+  };
   let finish!: (result: AgentRunResult) => void;
   const completion = new Promise<AgentRunResult>((resolve) => { finish = (result) => { if (!finished) { finished = true; resolve(result); } }; });
   const result = (status: AgentRunResult['status'], summary: string): AgentRunResult => ({ status, summary, turns: 1, mutated: false });
@@ -156,7 +177,8 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     if (threadId && turnId) void client.request('turn/interrupt', { threadId, turnId }).catch(() => {});
     finish(result('aborted', 'The Agent run was cancelled. Pending suggestions remain available for review.'));
   };
-  const timeout = setTimeout(() => finish(result('failed', 'Codex exceeded the five-minute limit. Review any suggestions before trying again.')), 300_000);
+  const timeLimitMs = options.timeLimitMs ?? DEFAULT_TIME_LIMIT_MS;
+  const timeout = setTimeout(() => finish(result('failed', `Codex exceeded the ${Math.round(timeLimitMs / 60_000)}-minute limit. Review any suggestions before trying again.`)), timeLimitMs);
   const idleTimeout = setInterval(() => {
     if (Date.now() - lastActivity >= 120_000) finish(result('failed', 'No Codex activity for two minutes. The run was stopped. Check the Codex provider connection or choose another model, then retry. Existing suggestions are still available.'));
   }, 1000);
@@ -194,21 +216,19 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     if (message.method === 'item/agentMessage/delta') {
       modelActivity();
       options.onStatus?.('Receiving the model response…');
-      const id = String(params.itemId);
-      messages.set(id, (messages.get(id) ?? '') + String(params.delta ?? ''));
-      options.onText?.([...messages.values()].join('\n\n'));
+      setMessage(String(params.itemId), String(params.delta ?? ''), true);
     }
     if (message.method === 'item/completed') {
       modelActivity();
       const item = params.item as { type?: string; id?: string; text?: string };
-      if (item?.type === 'agentMessage' && item.text) { messages.set(String(item.id), item.text); options.onText?.([...messages.values()].join('\n\n')); }
+      if (item?.type === 'agentMessage' && item.text) setMessage(String(item.id), item.text, false);
     }
     if (message.method === 'turn/completed') {
       const turn = params.turn as {status?: string; error?: CodexTurnError};
       const diagnostic = turn?.error ? codexDiagnostic(turn.error) : null;
       if (diagnostic) options.onDiagnostic?.(diagnostic);
       else if (turn?.status === 'completed') modelActivity();
-      finish(result(turn?.status === 'completed' ? 'completed' : turn?.status === 'interrupted' ? 'aborted' : 'failed', diagnostic?.detail || [...messages.values()].join('\n\n') || 'Codex finished. Review the suggestions below.'));
+      finish(result(turn?.status === 'completed' ? 'completed' : turn?.status === 'interrupted' ? 'aborted' : 'failed', diagnostic?.detail || combined || 'Codex finished. Review the suggestions below.'));
     }
   });
   client.onRequest = async (message) => {
@@ -233,25 +253,32 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     });
     try { await toolQueue; } catch (error) { finish(result('failed', error instanceof Error ? error.message : 'Could not return the document tool result to Codex.')); }
   };
+  const execute = async (): Promise<AgentRunResult> => {
+    try {
+      if (options.signal?.aborted) { cancel(); return await completion; }
+      status('Creating a Codex document session…');
+      if (!options.review) throw new Error('A document review session is required.');
+      const thread = await Promise.race([client.request<{thread: {id: string}; model?: string}>('thread/start', {
+        ...(options.model ? { model: options.model } : {}), baseInstructions: AGENT_SYSTEM_PROMPT,
+        dynamicTools: AGENT_TOOLS.map(({function: tool}) => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.parameters })),
+      }), completion]);
+      if ('status' in thread) return thread;
+      threadId = thread.thread.id;
+      status(`Sending your instruction to ${thread.model || options.model || 'the CLI default model'}…`);
+      if (finished || options.signal?.aborted) { cancel(); return await completion; }
+      const turn = await Promise.race([client.request<{turn: {id: string}}>('turn/start', { threadId, input: [{type:'text', text:options.prompt}] }), completion]);
+      if ('status' in turn) return turn;
+      turnId = turn.turn.id;
+      if (options.signal?.aborted) cancel();
+      return await completion;
+    } catch (error) {
+      return result(options.signal?.aborted ? 'aborted' : 'failed', error instanceof Error ? error.message : 'Codex failed.');
+    }
+  };
+  let outcome: AgentRunResult | null = null;
   try {
-    if (options.signal?.aborted) { cancel(); return await completion; }
-    status('Creating a Codex document session…');
-    if (!options.review) throw new Error('A document review session is required.');
-    const thread = await Promise.race([client.request<{thread: {id: string}; model?: string}>('thread/start', {
-      ...(options.model ? { model: options.model } : {}), baseInstructions: AGENT_SYSTEM_PROMPT,
-      dynamicTools: AGENT_TOOLS.map(({function: tool}) => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.parameters })),
-    }), completion]);
-    if ('status' in thread) return thread;
-    threadId = thread.thread.id;
-    status(`Sending your instruction to ${thread.model || options.model || 'the CLI default model'}…`);
-    if (finished || options.signal?.aborted) { cancel(); return await completion; }
-    const turn = await Promise.race([client.request<{turn: {id: string}}>('turn/start', { threadId, input: [{type:'text', text:options.prompt}] }), completion]);
-    if ('status' in turn) return turn;
-    turnId = turn.turn.id;
-    if (options.signal?.aborted) cancel();
-    return await completion;
-  } catch (error) {
-    return result(options.signal?.aborted ? 'aborted' : 'failed', error instanceof Error ? error.message : 'Codex failed.');
+    outcome = await execute();
+    return outcome;
   } finally {
     finished = true;
     toolAbort.abort();
@@ -260,6 +287,10 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
     options.signal?.removeEventListener('abort', cancel);
     unsubscribe();
     client.onRequest = null;
-    await client.close().catch(() => {});
+    if (outcome?.status === 'completed' && threadId && !client.isClosed) {
+      void client.request('thread/unsubscribe', { threadId }).catch(() => {});
+    } else {
+      await client.close().catch(() => {});
+    }
   }
 }

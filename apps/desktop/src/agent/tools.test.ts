@@ -82,6 +82,16 @@ describe('document Agent tools', () => {
     });
   });
 
+  it('falls back to a case-insensitive search and flags it for the model', async () => {
+    const hit = { evaluatedRevision: 'r1', items: [{ id: 'm', matchKind: 'text', snippet: 'Old Text', target: { kind: 'range', start: 1, end: 2 }, handle: { ref: 'h' } }] };
+    const match = vi.fn().mockResolvedValueOnce({ evaluatedRevision: 'r1', items: [] }).mockResolvedValueOnce(hit);
+    const document = createDocument({ query: { match } as unknown as AgentDocument['query'] });
+    const result = await dispatchAgentTool({ document }, 'superdoc_inspect', { findText: 'old text' });
+    expect(match).toHaveBeenLastCalledWith(expect.objectContaining({ select: expect.objectContaining({ caseSensitive: false }) }));
+    expect(result.matches).toHaveLength(1);
+    expect(result.matchNote).toContain('ignore letter case');
+  });
+
   it('rejects overlong mutation inputs before searching', async () => {
     const document = createDocument();
     const result = await dispatchAgentTool(

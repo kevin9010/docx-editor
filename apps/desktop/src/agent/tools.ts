@@ -153,11 +153,20 @@ async function inspectDocument(context: AgentToolContext, input: unknown): Promi
       result.matches = context.review.selection.text.includes(findText) ? [{ snippet: context.review.selection.text }] : [];
       return result;
     }
-    const matches = await context.document.query.match({
-      select: { type: 'text', pattern: findText, mode: 'contains', caseSensitive: true },
+    const search = (caseSensitive: boolean) => context.document.query.match({
+      select: { type: 'text', pattern: findText, mode: 'contains', caseSensitive },
       require: 'all',
       limit: MAX_MATCHES,
     });
+    let matches = await search(true);
+    // A model that misremembers letter case would otherwise spend a whole turn on
+    // a miss; show the near matches so it can copy the exact text.
+    if (matches.items.length === 0) {
+      matches = await search(false);
+      if (matches.items.length > 0) {
+        result.matchNote = 'No exact-case match. These matches ignore letter case; copy the exact text from a snippet before proposing an edit.';
+      }
+    }
     result.matches = matches.items.map((item) => {
       if (item.matchKind === 'text') {
         return {
