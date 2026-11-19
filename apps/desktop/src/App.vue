@@ -46,8 +46,14 @@ let metadataTimer: number | null = null;
 let unlistenDragDrop: (() => void) | null = null;
 let initializing = false;
 let suppressAutoSave = false;
+// True while applied Agent revisions are unsaved; they keep auto-save paused.
+let agentEditsUnsaved = false;
 let mountGeneration = 0;
 let lastDiskModifiedAt = 0;
+// Bumped on every edit, so a save can tell whether edits arrived while it ran.
+let editGeneration = 0;
+let unlistenClose: (() => void) | null = null;
+const agentPanel = ref<InstanceType<typeof AgentPanel> | null>(null);
 
 const fileName = computed(() => openedDocument.value?.name ?? 'No document');
 const canSave = computed(() => Boolean(editor.value && openedDocument.value && !isLoading.value && !isSaving.value && !agentBusy.value));
@@ -100,6 +106,7 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   autoSaveTimer = null;
   suppressAutoSave = false;
+  agentEditsUnsaved = false;
   unlistenSelection?.();
   unlistenSelection = null;
   selectionGeneration += 1;
@@ -155,6 +162,7 @@ async function mountDocument(document: OpenedDocument): Promise<void> {
     onEditorUpdate: () => {
       if (generation !== mountGeneration || initializing) return;
       selectionGeneration += 1;
+      editGeneration += 1;
       selection.value = null;
       isDirty.value = true;
       status.value = `Unsaved changes — ${document.name}`;
@@ -315,24 +323,40 @@ function downloadDocument(bytes: Uint8Array<ArrayBuffer>): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Mark a completed save. Edits made while the export and write were running are
+ * not in the saved bytes, so the document stays dirty and auto-save runs again.
+ */
+function finishSave(savedGeneration: number, message: string): void {
+  suppressAutoSave = false;
+  agentEditsUnsaved = false;
+  if (editGeneration === savedGeneration) {
+    isDirty.value = false;
+    status.value = message;
+    return;
+  }
+  status.value = `Unsaved changes — ${fileName.value}`;
+  scheduleAutoSave();
+}
+
 async function saveDocument(): Promise<void> {
   if (!canSave.value) return;
   isSaving.value = true;
   clearError();
+  const savedGeneration = editGeneration;
   try {
     const bytes = await exportCurrentDocument();
     if (!isTauriRuntime()) {
       downloadDocument(bytes);
-      isDirty.value = false;
-      suppressAutoSave = false;
-      status.value = 'Downloaded edited DOCX (browser preview).';
+      finishSave(savedGeneration, 'Downloaded edited DOCX (browser preview).');
       return;
     }
 
     const currentPath = openedDocument.value?.path ?? null;
     if (currentPath && lastDiskModifiedAt > 0) {
-      const metadata = await getDocumentFileMetadata(currentPath);
-      if (metadata.modifiedAtMs > lastDiskModifiedAt + 1 && !window.confirm(t('The file changed on disk. Overwrite it with your current edits?'))) {
+      // A file that was moved or deleted outside the app is simply written again.
+      const metadata = await getDocumentFileMetadata(currentPath).catch(() => null);
+      if (metadata && metadata.modifiedAtMs > lastDiskModifiedAt + 1 && !window.confirm(t('The file changed on disk. Overwrite it with your current edits?'))) {
         status.value = 'Save cancelled because the file changed on disk.';
         return;
       }
@@ -344,9 +368,7 @@ async function saveDocument(): Promise<void> {
         name: fileNameFromPath(path),
         data: bytes,
       };
-      isDirty.value = false;
-      suppressAutoSave = false;
-      status.value = `Saved ${fileName.value}`;
+      finishSave(savedGeneration, `Saved ${fileNameFromPath(path)}`);
       await refreshDiskMetadata();
     }
   } catch (error) {
@@ -361,22 +383,19 @@ async function saveAs(): Promise<void> {
   if (!editor.value || agentBusy.value || isSaving.value) return;
   isSaving.value = true;
   clearError();
+  const savedGeneration = editGeneration;
   try {
     const bytes = await exportCurrentDocument();
     if (!isTauriRuntime()) {
       downloadDocument(bytes);
-      isDirty.value = false;
-      suppressAutoSave = false;
-      status.value = 'Downloaded edited DOCX (browser preview).';
+      finishSave(savedGeneration, 'Downloaded edited DOCX (browser preview).');
       return;
     }
     const path = await chooseSavePath(openedDocument.value?.path);
     if (!path) return;
     await writeDocumentToPath(path, bytes);
     openedDocument.value = { path, name: fileNameFromPath(path), data: bytes };
-    isDirty.value = false;
-    suppressAutoSave = false;
-    status.value = `Saved ${fileName.value}`;
+    finishSave(savedGeneration, `Saved ${fileNameFromPath(path)}`);
     await refreshDiskMetadata();
   } catch (error) {
     errorMessage.value = messageFromError(error);
@@ -416,7 +435,11 @@ function scheduleAutoSave(): void {
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   autoSaveTimer = window.setTimeout(() => {
     autoSaveTimer = null;
-    if (!suppressAutoSave && autoSaveEnabled.value) void saveDocument();
+    if (suppressAutoSave || !autoSaveEnabled.value || !isDirty.value) return;
+    // A save already running, a load, or an Agent run blocks saving; try again
+    // afterwards rather than dropping the edit.
+    if (canSave.value) void saveDocument();
+    else scheduleAutoSave();
   }, autoSaveDelay(openedDocument.value.data.byteLength));
 }
 
@@ -439,8 +462,34 @@ function prepareAgentApply(): void {
 }
 
 function agentApplied(): void {
+  agentEditsUnsaved = true;
   isDirty.value = true;
   status.value = 'Agent revisions are ready for review. Auto-save is paused until you save.';
+}
+
+function agentApplyFailed(changed: boolean): void {
+  // Nothing reached the document, so there is nothing to hold back from auto-save.
+  if (changed || agentEditsUnsaved) return;
+  suppressAutoSave = false;
+  if (isDirty.value) scheduleAutoSave();
+}
+
+/** Ask before a window close discards unsaved edits. */
+async function listenForClose(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    unlistenClose = await getCurrentWebviewWindow().onCloseRequested((event) => {
+      agentPanel.value?.flushSettings();
+      if (isDirty.value && !window.confirm(t('Discard unsaved changes and close SuperDoc Desktop?'))) event.preventDefault();
+    });
+  } catch {
+    // Without the bridge the window closes as before.
+  }
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (isTauriRuntime() || !isDirty.value) return;
+  event.preventDefault();
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -464,8 +513,10 @@ onMounted(() => {
   window.addEventListener('dragover', handleWindowDragOver);
   window.addEventListener('dragleave', handleWindowDragLeave);
   window.addEventListener('drop', handleWindowDrop);
+  window.addEventListener('beforeunload', handleBeforeUnload);
   metadataTimer = window.setInterval(() => void pollDiskChanges(), 2500);
   void listenForNativeDrops();
+  void listenForClose();
 });
 
 onBeforeUnmount(() => {
@@ -473,8 +524,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('dragover', handleWindowDragOver);
   window.removeEventListener('dragleave', handleWindowDragLeave);
   window.removeEventListener('drop', handleWindowDrop);
+  window.removeEventListener('beforeunload', handleBeforeUnload);
   unlistenDragDrop?.();
   unlistenDragDrop = null;
+  unlistenClose?.();
+  unlistenClose = null;
   if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
   if (metadataTimer !== null) window.clearInterval(metadataTimer);
   unlistenSelection?.();
@@ -520,7 +574,7 @@ onBeforeUnmount(() => {
         <button class="agent-toggle" @click="showAgent = !showAgent">
           {{ t(showAgent ? 'Hide Agent' : 'Show Agent') }}
         </button>
-        <AgentPanel v-show="showAgent" :document="liveDocument" :selection="selection" :disabled="isLoading || isSaving" @busy="agentBusy = $event" @applying="prepareAgentApply" @applied="agentApplied" />
+        <AgentPanel v-show="showAgent" ref="agentPanel" :document="liveDocument" :selection="selection" :disabled="isLoading || isSaving" @busy="agentBusy = $event" @applying="prepareAgentApply" @applied="agentApplied" @apply-failed="agentApplyFailed" />
       </aside>
     </section>
 

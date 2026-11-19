@@ -124,9 +124,9 @@ function statusFromReceipt(receipt: unknown): 'applied' | 'failed' {
   return 'applied';
 }
 
-function truncateText(text: string): { text: string; truncated: boolean } {
-  if (text.length <= MAX_TEXT_CHARS) return { text, truncated: false };
-  return { text: `${text.slice(0, MAX_TEXT_CHARS)}\n[document text truncated]`, truncated: true };
+function fitsToolResult(result: AgentToolResult): boolean {
+  // Leave room for the findText matches added after the excerpt.
+  return JSON.stringify(result).length <= MAX_TOOL_RESULT_CHARS - 4000;
 }
 
 async function inspectDocument(context: AgentToolContext, input: unknown): Promise<AgentToolResult> {
@@ -140,11 +140,25 @@ async function inspectDocument(context: AgentToolContext, input: unknown): Promi
   if (options.includeText === true) {
     const text = context.review?.selection?.text ?? await context.document.getText({});
     const offset = typeof options.textOffset === 'number' && Number.isSafeInteger(options.textOffset) && options.textOffset >= 0 ? options.textOffset : 0;
-    Object.assign(result, truncateText(text.slice(offset)));
+    const excerpt = (length: number) => {
+      const end = Math.min(text.length, offset + length);
+      const more = end < text.length;
+      result.text = more ? `${text.slice(offset, end)}\n[document text truncated]` : text.slice(offset, end);
+      result.truncated = more;
+      result.nextTextOffset = more ? end : null;
+    };
     result.textOffset = offset;
     result.totalCharacters = text.length;
-    result.nextTextOffset = offset + MAX_TEXT_CHARS < text.length ? offset + MAX_TEXT_CHARS : null;
     result.scope = context.review?.selection ? 'selection' : 'document';
+    excerpt(MAX_TEXT_CHARS);
+    // JSON escaping and a long outline can push a full excerpt past the
+    // tool-result cap, which would replace every read with an error. Drop the
+    // outline first, then shorten the excerpt; nextTextOffset keeps paging exact.
+    if (!fitsToolResult(result)) result.info = { revision: info.revision };
+    for (let length = MAX_TEXT_CHARS; !fitsToolResult(result) && length > 1000;) {
+      length = Math.floor(length * 0.7);
+      excerpt(length);
+    }
   }
 
   const findText = stringField(input, 'findText', MAX_FIND_CHARS);

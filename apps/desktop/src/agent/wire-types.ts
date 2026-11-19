@@ -7,6 +7,8 @@ export interface ChatCompletionMessageParam {
     type: 'function';
     function: { name: string; arguments: string };
   }>;
+  /** Original Messages API content blocks, replayed verbatim on Anthropic-format turns. */
+  anthropic_content?: Array<{ type: string; [key: string]: unknown }>;
 }
 
 export interface ChatCompletionTool {

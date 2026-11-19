@@ -8,6 +8,12 @@ export type AgentDocument = Pick<BrowserDocumentApi, 'getText' | 'info' | 'query
 
 export type AgentToolName = 'superdoc_inspect' | 'superdoc_perform_action';
 
+/** Wire format of a user-configured model endpoint. */
+export type ApiFormat = 'openai' | 'anthropic';
+
+/** How an Anthropic-format gateway expects the API key. */
+export type AuthScheme = 'apiKey' | 'bearer';
+
 export interface AgentToolCall {
   id: string;
   type: 'function';
@@ -21,6 +27,7 @@ export interface AgentAssistantMessage {
   role: 'assistant';
   content: string | null;
   tool_calls?: AgentToolCall[];
+  anthropic_content?: Array<{ type: string; [key: string]: unknown }>;
 }
 
 export interface AgentToolResult {
@@ -35,6 +42,9 @@ export interface AgentRunOptions {
   model: string;
   baseUrl: string;
   apiKey: string;
+  /** Wire format for the Base URL loop; defaults to OpenAI-compatible. */
+  apiFormat?: ApiFormat;
+  authScheme?: AuthScheme;
   maxTurns?: number;
   /** Overall limit for one Codex run; defaults to five minutes. */
   timeLimitMs?: number;

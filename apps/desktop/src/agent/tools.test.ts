@@ -92,6 +92,25 @@ describe('document Agent tools', () => {
     expect(result.matchNote).toContain('ignore letter case');
   });
 
+  it('shrinks a whole-document excerpt to fit the tool-result cap and pages exactly', async () => {
+    const outline = Array.from({ length: 400 }, (_, index) => ({ level: 1, text: `Heading ${index}` }));
+    const text = '"quoted"\n'.repeat(5000);
+    const document = createDocument({
+      info: vi.fn().mockResolvedValue({ revision: 'r9', outline }),
+      getText: vi.fn().mockResolvedValue(text),
+    });
+    const result = await dispatchAgentTool({ document }, 'superdoc_inspect', { includeText: true });
+    const { toolResultMessage } = await import('./tools');
+    const message = toolResultMessage('call', result);
+    expect(JSON.parse(message.content as string).status).toBe('applied');
+    expect(result.info).toEqual({ revision: 'r9' });
+    expect(result.truncated).toBe(true);
+    expect(result.nextTextOffset).toBe((result.text as string).length - '\n[document text truncated]'.length);
+
+    const last = await dispatchAgentTool({ document }, 'superdoc_inspect', { includeText: true, textOffset: text.length - 9 });
+    expect(last).toMatchObject({ text: '"quoted"\n', truncated: false, nextTextOffset: null });
+  });
+
   it('rejects overlong mutation inputs before searching', async () => {
     const document = createDocument();
     const result = await dispatchAgentTool(

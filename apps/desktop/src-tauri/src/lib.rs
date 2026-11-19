@@ -1,5 +1,6 @@
 mod codex;
 mod commands;
+mod gateway;
 
 use tauri::Manager;
 
@@ -12,7 +13,10 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::file_metadata,
-            commands::chat_completion,
+            gateway::chat_completion,
+            gateway::anthropic_message,
+            gateway::list_models,
+            gateway::cancel_model_request,
             codex::codex_start,
             codex::codex_send,
             codex::codex_stop,

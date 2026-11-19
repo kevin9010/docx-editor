@@ -1,4 +1,4 @@
-import { requestChatCompletion, type ChatCompletionStreamEvent } from './endpoint';
+import { requestModelTurn, type ChatCompletionStreamEvent, type ModelTurn } from './endpoint';
 import { withAbort } from './cancellation';
 import { dispatchAgentTool, AGENT_SYSTEM_PROMPT, AGENT_TOOLS, toolResultMessage } from './tools';
 import type { AgentAssistantMessage, AgentMessages, AgentRunOptions, AgentRunResult } from './types';
@@ -12,7 +12,19 @@ function assistantMessage(message: AgentAssistantMessage): AgentMessages[number]
     role: 'assistant',
     content: message.content,
     ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
+    ...(message.anthropic_content ? { anthropic_content: message.anthropic_content } : {}),
   };
+}
+
+/** A turn the loop must not continue: the provider refused, or cut a tool call off mid-input. */
+function stoppedTurn(turn: ModelTurn, hasToolCalls: boolean): string | null {
+  if (turn.stopReason === 'refusal') {
+    return `The model declined this request${turn.stopDetail ? `: ${turn.stopDetail}` : '.'} Rephrase the instruction or choose another model.`;
+  }
+  if (hasToolCalls && (turn.stopReason === 'max_tokens' || turn.stopReason === 'length')) {
+    return 'The model reached its output limit before finishing a document tool call. Select a shorter passage and try again.';
+  }
+  return null;
 }
 
 export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentRunResult> {
@@ -46,17 +58,17 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
       }
     };
 
-    let response: Awaited<ReturnType<typeof requestChatCompletion>>;
+    let response: ModelTurn;
     try {
-      response = await withAbort(requestChatCompletion({
+      response = await withAbort(requestModelTurn({
+        format: options.apiFormat ?? 'openai',
         baseUrl: options.baseUrl,
         apiKey: options.apiKey,
+        authScheme: options.authScheme,
         model: options.model,
         messages,
         tools: AGENT_TOOLS,
-        temperature: 0.1,
-        maxTokens: 6000,
-      }, onEvent), options.signal);
+      }, onEvent, options.signal), options.signal);
     } catch (error) {
       return {
         status: options.signal?.aborted ? 'aborted' : 'failed',
@@ -66,13 +78,14 @@ export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentR
       };
     }
     if (options.signal?.aborted) return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn, mutated };
-    const message = response.choices[0]?.message;
+    const { message } = response;
     options.onActivity?.();
-    if (!message) throw new Error('The model response did not contain a message.');
 
     messages.push(assistantMessage(message));
     if (message.content && message.content !== streamed) options.onText?.(message.content);
     const calls = message.tool_calls ?? [];
+    const stopped = stoppedTurn(response, calls.length > 0);
+    if (stopped) return { status: 'failed', summary: stopped, turns: turn, mutated };
     if (calls.length === 0) {
       return {
         status: 'completed',
