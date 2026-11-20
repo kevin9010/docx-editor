@@ -123,7 +123,24 @@ jobs:
         run: pnpm --filter superdoc-desktop package:portable
 
       - name: Verify Windows artifacts
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-windows-artifacts.ps1
+        run: powershell -NoProfile -File apps/desktop/scripts/verify-windows-artifacts.ps1
+
+      - name: Launch packaged desktop and verify frontend readiness
+        run: |
+          $package = Get-Content -Raw apps/desktop/package.json | ConvertFrom-Json
+          $executable = "artifacts/desktop/SuperDoc-Desktop-$($package.version)-win-x64-portable/SuperDoc-Desktop.exe"
+          & apps/desktop/scripts/test-windows-startup.ps1 -Executable $executable -OutputDirectory artifacts/desktop/startup-smoke
+
+      - name: Upload native startup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-startup-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            artifacts/desktop/startup-smoke/*.txt
+            artifacts/desktop/startup-smoke/*.log
+            artifacts/desktop/startup-smoke/*.json
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4

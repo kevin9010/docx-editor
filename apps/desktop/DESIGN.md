@@ -21,6 +21,14 @@ A UUID identifies each native operation. Start registers its child before acknow
 - Optional live Codex testing uses only synthetic document text and the installed CLI. A successful local authentication check alone is not inference verification.
 - Native formatting, unit tests, Clippy and Windows packaging belong to the native build checks. The machine running them must have MSVC and the Windows SDK.
 
+## Native startup
+
+Windows creates one WebView2 environment using Microsoft's standard options and supplies it to the Tauri window builder. This avoids Wry's additional feature-disabling default arguments and keeps Evergreen's standard security, language, and profile behavior. The environment uses the existing application-local data directory; startup never deletes profiles, changes machine policy, or disables sandbox/integrity checks. The direct SDK dependencies reuse versions already in Cargo.lock.
+
+Configured automatic window creation is disabled so startup can catch environment/window errors, distinguish the environment stage from later window initialization, record a bounded startup-only diagnostic, and show a native error dialog instead of an invisible release panic. This is not a diagnosis of every WebView2 failure and does not silently retry with weaker protections.
+
+The fixed `--startup-smoke-test` flag suppresses only the modal error dialog and enables a constant stdout readiness marker. The main webview sends `startup_ready` after Vue mount/nextTick; this command takes no paths, text or credentials and cannot write files or launch programs. The test creates its own profile, waits for actual frontend/IPC readiness and a responsive window, rejects early exit, then closes only its own process. The same packaged executable must still be tested on the failing recipient machine. CLI authentication/inference is outside this startup check.
+
 ## Change history
 
 ### 2026-11-20 — Claude Code CLI provider

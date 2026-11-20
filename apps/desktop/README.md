@@ -35,12 +35,16 @@ The job installs locked dependencies, builds SuperDoc, runs desktop type checks,
 
 Installer builds make up to three attempts on the same runner, preserving Tauri's downloaded WiX/NSIS tools across temporary GitHub Releases download failures. A final build failure still fails the job and prevents artifact upload.
 
+Before releasing artifacts, CI also launches the actual portable EXE with a fresh WebView2 profile. It requires a mounted-frontend/native-IPC readiness acknowledgement, a responsive main window, five more seconds without exiting, and normal window closure. A surviving process or a valid PE header alone is not a pass. Native startup evidence is uploaded separately even when this check fails. This is not a substitute for testing on the recipient's Windows machine or a clean-machine installer test.
+
+Windows startup uses the installed Evergreen runtime's standard environment options, without Wry's default feature-disabling browser arguments. Window initialization errors are caught and shown in a native diagnostic dialog, with a bounded startup-only log under `%LOCALAPPDATA%\\dev.superdoc.desktop\\logs\\startup-error.log`; document content, model requests and credentials are not logged. Existing user profiles are neither deleted nor reset.
+
 Download `superdoc-desktop-windows-<commit>` from the completed run's **Artifacts** section. It contains the `.msi`, `-setup.exe`, `-portable.zip`, and `.zip.sha256` deliverables. Extract the portable ZIP to run `SuperDoc-Desktop.exe`; the installers and portable build have the WebView2 and signing limitations described above.
 
 To repeat artifact verification locally after packaging, run from the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/verify-windows-artifacts.ps1
+powershell -NoProfile -File apps/desktop/scripts/verify-windows-artifacts.ps1
 ```
 
 ## Language and window menus

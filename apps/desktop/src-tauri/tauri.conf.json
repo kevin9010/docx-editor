@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "SuperDoc Desktop",
         "theme": "Light",
         "width": 1440,
