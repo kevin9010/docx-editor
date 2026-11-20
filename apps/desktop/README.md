@@ -75,7 +75,17 @@ The bridge uses the [official Codex app-server protocol](https://developers.open
 
 Each run uses an ephemeral thread, an isolated working directory, no execution environments, and the supplied document tools. The bridge restricts client RPC methods, disables web search/apps, and never approves other server requests. Each completed run releases its thread; the child process stays connected for the next run and stops after ten idle minutes, a failed or cancelled run, a disconnect, or app exit. A reused process still re-checks the login before each run. Codex's configured model provider receives the requested document context; running the CLI locally does not mean inference is offline.
 
-### API providers: OpenAI-compatible and Anthropic (Claude)
+### Local Claude Code CLI
+
+Choose **Local Claude Code CLI** to use the native `claude` installation in your home `.local/bin` directory (`%USERPROFILE%\.local\bin\claude.exe` on Windows). Install and sign in using Claude Code's own installer and `claude auth login` before using it here. The app does not install Claude Code, read its credential files, or accept arbitrary executable paths. The optional model field accepts a CLI alias such as `opus` or `sonnet`, or a full supported model ID. An empty field uses the CLI default in safe mode.
+
+**Check connection** checks the installed executable and local authentication status without sending document text or spending inference tokens. It does not prove that a provider will accept a generation request. The app inherits the desktop process environment (including supported Claude provider environment variables); it does not load project or user extensions/settings. Credentials configured only through a user's settings file must instead be available through the CLI login or the desktop process environment. Restart the desktop app after changing environment variables. No credentials are copied into app storage.
+
+Generation starts a fresh non-interactive CLI process with `--safe-mode`, no built-in model tools, an empty strict MCP configuration, no Chrome integration or slash commands, and `--no-session-persistence`. Organization-managed policies can still apply: these flags are not an OS sandbox or a guarantee of zero filesystem writes. The document is passed as UTF-8 on stdin, not a command-line argument or temporary document file. The result must be a successful structured-output wrapper; plain text, malformed output, interrupted output, and CLI error results are not treated as successful suggestions. Older CLIs that do not support the safety flags must be updated; the app never silently retries with protections removed.
+
+Claude Code returns a bounded batch of at most 16 suggestions rather than using Codex's live document-tool protocol. Exact text, unique whole-document matches, captured-selection scope, and current document revisions are rechecked through the same review layer. Suggestions remain editable and unapplied until the user approves them. Whole documents above 120,000 characters are rejected rather than silently truncated; select a passage (at most 12,000 characters) instead. If later suggestions fail validation, earlier pending suggestions remain available for review. The CLI response is shown after generation completes (not token-streamed); progress, elapsed time, Stop, and a 5–15-minute total limit remain available. Stop terminates the matching CLI child and ignores any late result, but does not guarantee the remote provider stops billing immediately.
+
+### Optional API providers: OpenAI-compatible and Anthropic (Claude)
 
 Two providers call a model endpoint directly through the native Rust gateway:
 

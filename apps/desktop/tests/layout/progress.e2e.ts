@@ -182,7 +182,7 @@ test('slow Base URL requests show progress and cancellation ignores a late respo
     }) : 1,
   } }));
   await open(page);
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-key');
   await page.clock.install();

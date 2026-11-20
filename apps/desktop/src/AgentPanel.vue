@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { WRITING_ACTIONS, agentRunBudget, buildWritingPrompt, type WritingAction } from './agent/actions';
 import { connectCodex, inspectCodex, runCodexAgent, type CodexClient, type CodexStatus } from './agent/codex';
 import { runDocumentAgent } from './agent/loop';
+import { checkClaude, runClaudeAgent } from './agent/claude';
 import { listModels, type ModelInfo } from './agent/endpoint';
 import { applyProposal } from './agent/review';
 import { withAbort } from './agent/cancellation';
@@ -13,14 +14,17 @@ const props = defineProps<{ document: AgentDocument | null; selection: AgentSele
 // `applyFailed` carries whether the document changed despite the failure.
 const emit = defineEmits<{ busy: [value: boolean]; applying: []; applied: []; applyFailed: [changed: boolean] }>();
 
-type Provider = 'codex' | ApiFormat;
+type Provider = 'codex' | 'claude' | ApiFormat;
+function isApiProvider(value: Provider): value is ApiFormat { return value === 'openai' || value === 'anthropic'; }
 const stored = (key: string) => localStorage.getItem(`superdoc.desktop.${key}`);
 // Earlier versions stored the OpenAI-compatible provider as `baseUrl` with unprefixed keys.
 const storedProvider = stored('provider');
-const provider = ref<Provider>(storedProvider === 'baseUrl' || storedProvider === 'openai' ? 'openai' : storedProvider === 'anthropic' ? 'anthropic' : 'codex');
+const provider = ref<Provider>(storedProvider === 'baseUrl' || storedProvider === 'openai' ? 'openai' : storedProvider === 'anthropic' ? 'anthropic' : storedProvider === 'claude' ? 'claude' : 'codex');
 const executable = ref(stored('codexPath') ?? '');
 const codexModel = ref(stored('codexModel') ?? '');
-const PROVIDER_LABELS: Record<Provider, string> = { codex: 'Local Codex CLI', openai: 'OpenAI-compatible API', anthropic: 'Anthropic (Claude) API' };
+const claudeModel = ref(stored('claudeModel') ?? '');
+const claudeConnection = ref<{ executable: string; signedIn: boolean } | null>(null);
+const PROVIDER_LABELS: Record<Provider, string> = { codex: 'Local Codex CLI', claude: 'Local Claude Code CLI', openai: 'OpenAI-compatible API', anthropic: 'Anthropic (Claude) API' };
 
 // Each API format keeps its own endpoint, model, session key and model list, so
 // switching providers never sends one provider's key to another's endpoint.
@@ -45,7 +49,7 @@ function loadApiSettings(format: ApiFormat): void {
 function saveApiSettings(format: ApiFormat): void {
   Object.assign(apiSettings[format], { baseUrl: baseUrl.value.trim(), model: model.value.trim(), apiKey: apiKey.value, models: availableModels.value });
 }
-loadApiSettings(provider.value === 'codex' ? 'openai' : provider.value);
+loadApiSettings(isApiProvider(provider.value) ? provider.value : 'openai');
 const action = ref<WritingAction>('polish');
 const instruction = ref('');
 const language = ref('');
@@ -161,26 +165,27 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 function persistSettings(): void {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = null;
-  if (provider.value !== 'codex') saveApiSettings(provider.value);
+  if (isApiProvider(provider.value)) saveApiSettings(provider.value);
   const values: Record<string, string> = {
-    provider: provider.value, codexPath: executable.value.trim(), codexModel: codexModel.value,
+    provider: provider.value, codexPath: executable.value.trim(), codexModel: codexModel.value, claudeModel: claudeModel.value,
     'openai.baseUrl': apiSettings.openai.baseUrl, 'openai.model': apiSettings.openai.model,
     'anthropic.baseUrl': apiSettings.anthropic.baseUrl, 'anthropic.model': apiSettings.anthropic.model,
     'anthropic.authScheme': authScheme.value,
   };
   for (const [key, value] of Object.entries(values)) localStorage.setItem(`superdoc.desktop.${key}`, value);
 }
-watch([provider, executable, codexModel, baseUrl, model, authScheme], () => {
+watch([provider, executable, codexModel, claudeModel, baseUrl, model, authScheme], () => {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(persistSettings, 300);
 });
 watch(executable, () => { connection.value = null; void closeCodex(); });
 watch(provider, (next, previous) => {
-  if (previous !== 'codex') saveApiSettings(previous);
-  if (next !== 'codex') {
-    loadApiSettings(next);
-    void closeCodex();
-  }
+  if (isApiProvider(previous)) saveApiSettings(previous);
+  if (isApiProvider(next)) loadApiSettings(next);
+  if (next !== 'codex') void closeCodex();
+  status.value = '';
+  output.value = '';
+  claudeConnection.value = null;
   error.value = '';
   diagnostic.value = null;
 });
@@ -226,17 +231,23 @@ async function checkConnection(): Promise<void> {
   diagnostic.value = null;
   checking.value = true;
   beginProgress();
-  setStatus('Checking installed Codex…');
+  setStatus(provider.value === 'claude' ? 'Checking installed Claude Code…' : 'Checking installed Codex…');
   abort = new AbortController();
   try {
-    await openCodex(true);
-    setStatus('Codex login and model list checked. Provider availability is checked when you generate suggestions.');
+    if (provider.value === 'claude') {
+      claudeConnection.value = await checkClaude(abort.signal);
+      if (!claudeConnection.value.signedIn) throw new Error('Claude Code is not signed in. Run claude auth login in your terminal, then check the connection again.');
+      setStatus('Claude Code installation and login checked. Model availability is checked when you generate suggestions.');
+    } else {
+      await openCodex(true);
+      setStatus('Codex login and model list checked. Provider availability is checked when you generate suggestions.');
+    }
   } catch (reason) { if (!abort?.signal.aborted) error.value = errorText(reason); setStatus(abort?.signal.aborted ? 'Connection check stopped.' : 'Connection check failed.'); }
   finally { scheduleCodexIdleClose(); abort = null; busy.value = false; checking.value = false; endProgress(); }
 }
 
 async function loadModels(): Promise<void> {
-  if (provider.value === 'codex' || busy.value) return;
+  if (!isApiProvider(provider.value) || busy.value) return;
   const format = provider.value;
   if (!apiKey.value.trim()) { error.value = 'Enter a session API key in Connection settings, then retry.'; return; }
   busy.value = true;
@@ -267,8 +278,8 @@ async function run(): Promise<void> {
   setStatus('Preparing document context…');
   abort = new AbortController();
   try {
-    if (provider.value !== 'codex' && !apiKey.value.trim()) { settingsOpen.value = true; throw new Error('Enter a session API key in Connection settings, then retry.'); }
-    if (provider.value !== 'codex' && !model.value.trim()) { settingsOpen.value = true; throw new Error('A model name is required to run the Agent.'); }
+    if (isApiProvider(provider.value) && !apiKey.value.trim()) { settingsOpen.value = true; throw new Error('Enter a session API key in Connection settings, then retry.'); }
+    if (isApiProvider(provider.value) && !model.value.trim()) { settingsOpen.value = true; throw new Error('A model name is required to run the Agent.'); }
     const info = await withAbort(Promise.resolve(document.info({})), abort.signal);
     if (action.value === 'translate' && !language.value.trim()) throw new Error('Enter the language to translate into.');
     const selection = scope.value === 'selection' ? props.selection : undefined;
@@ -285,9 +296,9 @@ async function run(): Promise<void> {
       document, review: review.value,
       prompt: buildWritingPrompt(action.value, instruction.value, language.value, Boolean(selection)) + (locale.value === 'zh-CN' ? '\nExplain progress and suggestions to the user in Simplified Chinese. Keep the replacement text in the original or explicitly requested output language.' : ''),
       baseUrl: baseUrl.value, apiKey: apiKey.value,
-      apiFormat: provider.value === 'codex' ? undefined : provider.value,
+      apiFormat: isApiProvider(provider.value) ? provider.value : undefined,
       authScheme: authScheme.value,
-      model: provider.value === 'codex' ? codexModel.value : model.value.trim(),
+      model: provider.value === 'codex' ? codexModel.value : provider.value === 'claude' ? claudeModel.value : model.value.trim(),
       signal: abort.signal,
       onStatus: setStatus,
       onActivity: markActivity,
@@ -296,7 +307,7 @@ async function run(): Promise<void> {
     };
     const result = provider.value === 'codex'
       ? await runCodexAgent(await openCodex(), options)
-      : await runDocumentAgent(options);
+      : provider.value === 'claude' ? await runClaudeAgent(options) : await runDocumentAgent(options);
     flushOutput();
     if (result.status === 'completed' || !output.value) output.value = result.summary;
     setStatus(result.status === 'completed' ? 'Ready for your review.' : result.status === 'aborted' ? 'Stopped. Any suggestions below can still be reviewed.' : diagnostic.value ? 'The run stopped because the model service returned errors. Review the details below.' : 'The run did not complete.');
@@ -345,7 +356,7 @@ onBeforeUnmount(() => {
     <section v-if="status || progressActive" class="agent-progress" :aria-label="t('Agent progress')">
       <div class="progress-current"><span v-if="progressActive" class="progress-spinner" /><strong class="agent-status-text" role="status">{{ t(status) }}</strong><button v-if="progressActive" @click="stop">{{ t(review?.proposals.length && running ? 'Stop and review' : 'Stop') }}</button></div>
       <p class="progress-time">{{ t(progressActive ? 'Elapsed' : 'Duration') }} {{ elapsed }}s<span v-if="progressActive"> · {{ t(`Last update ${quietSeconds}s ago`) }}</span><span v-if="review?.proposals.length"> · {{ t(`${review.proposals.length} suggestion(s)`) }}</span></p>
-      <p v-if="progressActive && quietSeconds >= 20" class="progress-wait">{{ t(`No new update for ${quietSeconds}s. Waiting for ${t(provider === 'codex' ? 'Codex / its model provider' : 'the model endpoint')}; you can stop at any time.`) }}</p>
+      <p v-if="progressActive && quietSeconds >= 20" class="progress-wait">{{ t(`No new update for ${quietSeconds}s. Waiting for ${t(provider === 'codex' ? 'Codex / its model provider' : provider === 'claude' ? 'Claude Code / its model provider' : 'the model endpoint')}; you can stop at any time.`) }}</p>
       <p v-if="running && output" class="progress-preview">{{ output.slice(-240) }}</p>
       <details class="activity-log"><summary>{{ t(`Activity · ${activityLog.length} updates`) }}</summary><ol><li v-for="(entry, index) in activityLog" :key="index"><time>+{{ Math.max(0, Math.floor((entry.at - startedAt) / 1000)) }}s</time><span>{{ t(entry.message) }}</span></li></ol></details>
     </section>
@@ -367,6 +378,14 @@ onBeforeUnmount(() => {
         <button :disabled="busy" @click="checkConnection">{{ t('Check connection') }}</button>
         <small v-if="connection" class="connection-path">{{ connection.executable }}</small>
         <p class="agent-description">{{ t('Uses the Codex already installed on this computer and its existing login.') }}</p>
+      </div>
+      <div v-else-if="provider === 'claude'" class="agent-settings">
+        <label class="field-label" for="claude-model">{{ t('Model') }} <span>{{ t('(optional)') }}</span></label>
+        <input id="claude-model" v-model="claudeModel" :disabled="busy" autocomplete="off" spellcheck="false" :placeholder="t('CLI default')" />
+        <button :disabled="busy" @click="checkConnection">{{ t('Check connection') }}</button>
+        <small v-if="claudeConnection" class="connection-path">{{ claudeConnection.executable }}</small>
+        <p class="agent-description">{{ t('Uses the native Claude Code installed in your home .local/bin directory and its existing login or environment credentials. No API key is stored by this app.') }}</p>
+        <p class="agent-description">{{ t('Claude Code runs with tools and customizations disabled. It returns suggestions only; select a passage for documents over 120,000 characters.') }}</p>
       </div>
       <div v-else class="agent-settings">
         <label class="field-label" for="base-url">{{ t('Base URL') }}</label><input id="base-url" v-model="baseUrl" :disabled="busy" autocomplete="off" spellcheck="false" />
@@ -395,7 +414,7 @@ onBeforeUnmount(() => {
     <textarea id="agent-prompt" v-model="instruction" :disabled="busy" rows="3" :placeholder="t('E.g. Make the tone warmer while preserving the meaning.')" />
     <section class="run-confirmation" :aria-label="t('Review task')">
       <strong>{{ t('Review task') }}</strong>
-      <p>{{ t(actionLabel) }} · {{ t(scope === 'selection' ? 'Selected passage' : 'Whole document') }} · {{ t(PROVIDER_LABELS[provider]) }}<template v-if="provider !== 'codex' && model.trim()"> · {{ model.trim() }}</template></p>
+      <p>{{ t(actionLabel) }} · {{ t(scope === 'selection' ? 'Selected passage' : 'Whole document') }} · {{ t(PROVIDER_LABELS[provider]) }}<template v-if="provider === 'claude' && claudeModel.trim()"> · {{ claudeModel.trim() }}</template><template v-if="isApiProvider(provider) && model.trim()"> · {{ model.trim() }}</template></p>
       <p>{{ t('Starting generates suggestions for your review. You can edit each suggestion before applying it.') }}</p>
       <button class="primary" :disabled="!canRun" @click="run">{{ t('Confirm and generate suggestions') }}</button>
     </section>
@@ -419,7 +438,7 @@ onBeforeUnmount(() => {
         <p v-if="proposal.error" class="error-text">{{ t(proposal.error) }}</p>
       </article>
     </div>
-    <p class="privacy-note">{{ t(`Only when you run the Agent, the chosen document context is sent through ${t(provider === 'codex' ? 'your Codex provider' : 'your configured endpoint')}. Suggestions are saved only when you apply them and save the document.`) }}</p>
+    <p class="privacy-note">{{ t(`Only when you run the Agent, the chosen document context is sent through ${t(provider === 'codex' ? 'your Codex provider' : provider === 'claude' ? 'your Claude Code provider' : 'your configured endpoint')}. Suggestions are saved only when you apply them and save the document.`) }}</p>
     </div>
   </div>
 </template>

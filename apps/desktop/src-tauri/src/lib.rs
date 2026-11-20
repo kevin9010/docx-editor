@@ -1,3 +1,4 @@
+mod claude;
 mod codex;
 mod commands;
 mod gateway;
@@ -8,6 +9,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .manage(codex::CodexState::default())
+        .manage(claude::ClaudeState::default())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
@@ -20,12 +22,15 @@ pub fn run() {
             codex::codex_start,
             codex::codex_send,
             codex::codex_stop,
+            claude::claude_start,
+            claude::claude_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building SuperDoc Desktop")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 app.state::<codex::CodexState>().stop();
+                app.state::<claude::ClaudeState>().stop();
             }
         });
 }

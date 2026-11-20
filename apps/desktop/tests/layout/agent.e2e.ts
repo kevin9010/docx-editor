@@ -54,7 +54,7 @@ test('edits a suggestion, applies the reviewed wording as a revision, and export
   page.on('pageerror', (error) => errors.push(error.message));
   await mockBaseUrl(page);
   await open(page);
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-test-key');
   await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
@@ -107,7 +107,7 @@ test('edits a suggestion, applies the reviewed wording as a revision, and export
 test('selecting any writing action waits for explicit confirmation before contacting Base URL', async ({ page }) => {
   await mockBaseUrl(page);
   await open(page);
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-test-key');
   for (const name of ['Revise', 'Polish', 'Proofread', 'Academic', 'Translate', 'Summarize', 'Custom']) {
@@ -124,10 +124,51 @@ test('selecting any writing action waits for explicit confirmation before contac
   expect(await page.evaluate(() => Reflect.get(window, 'agentRequestCount'))).toBeGreaterThan(0);
 });
 
+test('proposes a revision through an Anthropic-format gateway and replays thinking blocks', async ({ page }) => {
+  const gatewayModel = 'magpie-test.anthropic.claude-opus-5-5';
+  await page.addInitScript(({ original, replacement }) => {
+    const requests: unknown[] = [];
+    Object.assign(window, { anthropicRequests: requests, __TAURI_INTERNALS__: {
+      transformCallback: () => 1, unregisterCallback: () => {},
+      metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
+      invoke: async (command: string, args?: { request?: unknown }) => {
+        if (command !== 'anthropic_message') return 1;
+        requests.push(args?.request);
+        const thinking = { type: 'thinking', thinking: '', signature: `sig-${requests.length}` };
+        if (requests.length === 1) return { stop_reason: 'tool_use', content: [thinking, { type: 'tool_use', id: 'toolu_1', name: 'superdoc_inspect', input: { includeText: true } }] };
+        if (requests.length === 2) return { stop_reason: 'tool_use', content: [thinking, { type: 'tool_use', id: 'toolu_2', name: 'superdoc_perform_action', input: { action: 'replace_text', find: original, replacement } }] };
+        return { stop_reason: 'end_turn', content: [thinking, { type: 'text', text: 'Review this wording suggestion before applying it.' }] };
+      },
+    } });
+  }, { original, replacement });
+  await open(page);
+  await page.locator('#agent-provider').selectOption('anthropic');
+  await page.getByText('Connection settings', { exact: true }).click();
+  await page.locator('#base-url').fill('https://gateway.example.test');
+  await page.locator('#api-key').fill('synthetic-gateway-key');
+  await page.locator('#auth-scheme').selectOption('bearer');
+  await page.locator('#model').fill(gatewayModel);
+  await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
+  await expect(page.getByRole('textbox', { name: 'Edit suggestion 1', exact: true })).toHaveValue(replacement);
+  await expect(page.locator('.agent-summary')).toContainText('Review this wording suggestion');
+  const requests = await page.evaluate(() => Reflect.get(window, 'anthropicRequests')) as Array<{ baseUrl: string; authScheme: string; model: string; system: string; messages: Array<{ role: string; content: unknown }> }>;
+  expect(requests).toHaveLength(3);
+  expect(requests[0]).toMatchObject({ baseUrl: 'https://gateway.example.test/v1/messages', authScheme: 'bearer', model: gatewayModel });
+  expect(requests[0].system).toContain('SuperDoc desktop document assistant');
+  // The assistant turn goes back with its thinking block and signature unchanged.
+  expect(requests[1].messages[1]).toEqual({ role: 'assistant', content: [
+    { type: 'thinking', thinking: '', signature: 'sig-1' },
+    { type: 'tool_use', id: 'toolu_1', name: 'superdoc_inspect', input: { includeText: true } },
+  ] });
+  expect(requests[1].messages[2]).toMatchObject({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1' }] });
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain('synthetic-gateway-key');
+  expect(await page.evaluate(() => localStorage.getItem('superdoc.desktop.anthropic.model'))).toBe(gatewayModel);
+});
+
 test('edits a proposed comment before adding and exporting it', async ({ page }, testInfo) => {
   await mockBaseUrl(page, 'add_comment');
   await open(page);
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-test-key');
   await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
@@ -156,7 +197,7 @@ test('edits a proposed comment before adding and exporting it', async ({ page },
 test('dismissing an edited draft leaves the document unchanged', async ({ page }) => {
   await mockBaseUrl(page);
   await open(page);
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-test-key');
   await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
@@ -184,7 +225,7 @@ test('applies a selected-passage suggestion through the editor worker', async ({
   await page.locator('.editor-host .superdoc-text-run').first().dblclick();
   await expect(page.locator('.selection-preview')).toBeVisible();
   const selected = await page.locator('.selection-preview').innerText();
-  await page.locator('#agent-provider').selectOption('baseUrl');
+  await page.locator('#agent-provider').selectOption('openai');
   await page.getByText('Connection settings', { exact: true }).click();
   await page.locator('#api-key').fill('synthetic-test-key');
   await page.getByRole('button', { name: 'Confirm and generate suggestions' }).click();
