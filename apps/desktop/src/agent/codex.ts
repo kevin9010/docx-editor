@@ -258,13 +258,14 @@ export async function runCodexAgent(client: CodexClient, options: AgentRunOption
       if (options.signal?.aborted) { cancel(); return await completion; }
       status('Creating a Codex document session…');
       if (!options.review) throw new Error('A document review session is required.');
+      const model = options.model.trim();
       const thread = await Promise.race([client.request<{thread: {id: string}; model?: string}>('thread/start', {
-        ...(options.model ? { model: options.model } : {}), baseInstructions: AGENT_SYSTEM_PROMPT,
+        ...(model ? { model } : {}), baseInstructions: AGENT_SYSTEM_PROMPT,
         dynamicTools: AGENT_TOOLS.map(({function: tool}) => ({ type: 'function', name: tool.name, description: tool.description, inputSchema: tool.parameters })),
       }), completion]);
       if ('status' in thread) return thread;
       threadId = thread.thread.id;
-      status(`Sending your instruction to ${thread.model || options.model || 'the CLI default model'}…`);
+      status(`Sending your instruction to ${thread.model || model || 'the CLI default model'}…`);
       if (finished || options.signal?.aborted) { cancel(); return await completion; }
       const turn = await Promise.race([client.request<{turn: {id: string}}>('turn/start', { threadId, input: [{type:'text', text:options.prompt}] }), completion]);
       if ('status' in turn) return turn;

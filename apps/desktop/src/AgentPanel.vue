@@ -21,8 +21,10 @@ const stored = (key: string) => localStorage.getItem(`superdoc.desktop.${key}`);
 const storedProvider = stored('provider');
 const provider = ref<Provider>(storedProvider === 'baseUrl' || storedProvider === 'openai' ? 'openai' : storedProvider === 'anthropic' ? 'anthropic' : storedProvider === 'claude' ? 'claude' : 'codex');
 const executable = ref(stored('codexPath') ?? '');
-const codexModel = ref(stored('codexModel') ?? '');
-const claudeModel = ref(stored('claudeModel') ?? '');
+const codexModel = ref((stored('codexModel') ?? '').trim());
+const claudeModel = ref((stored('claudeModel') ?? '').trim());
+const claudeAliases = ['opus', 'sonnet', 'haiku', 'fable', 'best', 'opusplan', 'sonnet[1m]', 'opus[1m]'];
+const selectedModel = computed(() => (provider.value === 'codex' ? codexModel.value : provider.value === 'claude' ? claudeModel.value : model.value).trim());
 const claudeConnection = ref<{ executable: string; signedIn: boolean } | null>(null);
 const PROVIDER_LABELS: Record<Provider, string> = { codex: 'Local Codex CLI', claude: 'Local Claude Code CLI', openai: 'OpenAI-compatible API', anthropic: 'Anthropic (Claude) API' };
 
@@ -167,7 +169,7 @@ function persistSettings(): void {
   persistTimer = null;
   if (isApiProvider(provider.value)) saveApiSettings(provider.value);
   const values: Record<string, string> = {
-    provider: provider.value, codexPath: executable.value.trim(), codexModel: codexModel.value, claudeModel: claudeModel.value,
+    provider: provider.value, codexPath: executable.value.trim(), codexModel: codexModel.value.trim(), claudeModel: claudeModel.value.trim(),
     'openai.baseUrl': apiSettings.openai.baseUrl, 'openai.model': apiSettings.openai.model,
     'anthropic.baseUrl': apiSettings.anthropic.baseUrl, 'anthropic.model': apiSettings.anthropic.model,
     'anthropic.authScheme': authScheme.value,
@@ -298,7 +300,7 @@ async function run(): Promise<void> {
       baseUrl: baseUrl.value, apiKey: apiKey.value,
       apiFormat: isApiProvider(provider.value) ? provider.value : undefined,
       authScheme: authScheme.value,
-      model: provider.value === 'codex' ? codexModel.value : provider.value === 'claude' ? claudeModel.value : model.value.trim(),
+      model: selectedModel.value,
       signal: abort.signal,
       onStatus: setStatus,
       onActivity: markActivity,
@@ -374,14 +376,22 @@ onBeforeUnmount(() => {
         <label class="field-label" for="codex-path">{{ t('Codex executable') }} <span>{{ t('(optional)') }}</span></label>
         <input id="codex-path" v-model="executable" :disabled="busy" :placeholder="t('Auto-detect installed Codex')" />
         <label class="field-label" for="codex-model">{{ t('Model') }}</label>
-        <select id="codex-model" v-model="codexModel" :disabled="busy"><option value="">{{ t('CLI default') }}</option><option v-if="codexModel && !connection?.models.some(item => item.model === codexModel)" :value="codexModel">{{ codexModel }}</option><option v-for="item in connection?.models" :key="item.model" :value="item.model">{{ item.displayName }}</option></select>
-        <button :disabled="busy" @click="checkConnection">{{ t('Check connection') }}</button>
+        <input id="codex-model" v-model="codexModel" :disabled="busy" autocomplete="off" spellcheck="false" list="codex-model-options" :placeholder="t('CLI default')" aria-describedby="codex-model-help" />
+        <datalist id="codex-model-options"><option v-for="item in connection?.models" :key="item.model" :value="item.model">{{ item.displayName }}</option></datalist>
+        <button :disabled="busy || !codexModel" @click="codexModel = ''">{{ t('Use CLI default') }}</button>
+        <small id="codex-model-help" class="agent-description">{{ t('Type a model ID or choose a suggestion. Leave blank to use the CLI default. The list is not an allowlist.') }}</small>
+        <button :disabled="busy" :title="t('Check connection and load models')" @click="checkConnection">{{ t('Check connection') }}</button>
+        <small v-if="connection?.models.length" class="connection-path">{{ t(`${connection.models.length} model(s) available`) }}</small>
         <small v-if="connection" class="connection-path">{{ connection.executable }}</small>
         <p class="agent-description">{{ t('Uses the Codex already installed on this computer and its existing login.') }}</p>
       </div>
       <div v-else-if="provider === 'claude'" class="agent-settings">
         <label class="field-label" for="claude-model">{{ t('Model') }} <span>{{ t('(optional)') }}</span></label>
-        <input id="claude-model" v-model="claudeModel" :disabled="busy" autocomplete="off" spellcheck="false" :placeholder="t('CLI default')" />
+        <input id="claude-model" v-model="claudeModel" :disabled="busy" autocomplete="off" spellcheck="false" list="claude-model-options" :placeholder="t('CLI default')" aria-describedby="claude-model-help" />
+        <datalist id="claude-model-options"><option v-for="alias in claudeAliases" :key="alias" :value="alias">{{ alias }}</option></datalist>
+        <button :disabled="busy || !claudeModel" @click="claudeModel = ''">{{ t('Use CLI default') }}</button>
+        <small id="claude-model-help" class="agent-description">{{ t('Type a model ID or choose a suggestion. Leave blank to use the CLI default. The list is not an allowlist.') }}</small>
+        <p class="agent-description">{{ t('Claude suggestions are common aliases, not discovered account models. Custom provider IDs are supported; CLI and account policies still apply.') }}</p>
         <button :disabled="busy" @click="checkConnection">{{ t('Check connection') }}</button>
         <small v-if="claudeConnection" class="connection-path">{{ claudeConnection.executable }}</small>
         <p class="agent-description">{{ t('Uses the native Claude Code installed in your home .local/bin directory and its existing login or environment credentials. No API key is stored by this app.') }}</p>
@@ -414,7 +424,7 @@ onBeforeUnmount(() => {
     <textarea id="agent-prompt" v-model="instruction" :disabled="busy" rows="3" :placeholder="t('E.g. Make the tone warmer while preserving the meaning.')" />
     <section class="run-confirmation" :aria-label="t('Review task')">
       <strong>{{ t('Review task') }}</strong>
-      <p>{{ t(actionLabel) }} · {{ t(scope === 'selection' ? 'Selected passage' : 'Whole document') }} · {{ t(PROVIDER_LABELS[provider]) }}<template v-if="provider === 'claude' && claudeModel.trim()"> · {{ claudeModel.trim() }}</template><template v-if="isApiProvider(provider) && model.trim()"> · {{ model.trim() }}</template></p>
+      <p>{{ t(actionLabel) }} · {{ t(scope === 'selection' ? 'Selected passage' : 'Whole document') }} · {{ t(PROVIDER_LABELS[provider]) }}<template v-if="selectedModel"> · {{ selectedModel }}</template><template v-else-if="!isApiProvider(provider)"> · {{ t('CLI default') }}</template></p>
       <p>{{ t('Starting generates suggestions for your review. You can edit each suggestion before applying it.') }}</p>
       <button class="primary" :disabled="!canRun" @click="run">{{ t('Confirm and generate suggestions') }}</button>
     </section>

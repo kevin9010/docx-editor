@@ -9,6 +9,10 @@ describe('desktop messages', () => {
     expect(t('Connection interrupted; Codex is retrying. HTTP 503')).toBe('连接中断，Codex 正在重试。HTTP 503');
     expect(t('Last update 21s ago')).toBe('21 秒前收到更新');
     expect(t('Local Claude Code CLI')).toBe('本机 Claude Code CLI');
+    expect(t('Use CLI default')).toBe('恢复 CLI 默认模型');
+    expect(t('Type a model ID or choose a suggestion. Leave blank to use the CLI default. The list is not an allowlist.')).toContain('不受提示列表限制');
+    expect(t('Claude suggestions are common aliases, not discovered account models. Custom provider IDs are supported; CLI and account policies still apply.')).toContain('组织策略');
+    expect(t('provider/custom-model-v2')).toBe('provider/custom-model-v2');
     expect(t('Starting the installed Claude Code CLI…')).toBe('正在启动本机 Claude Code CLI…');
     expect(t('For Claude Code, select a passage or use a document with at most 120,000 characters.')).toContain('120,000');
     expect(t('Unknown provider response')).toBe('Unknown provider response');

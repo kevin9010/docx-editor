@@ -18,7 +18,8 @@ A UUID identifies each native operation. Start registers its child before acknow
 
 - Unit tests exercise transport cancellation races, timeout, bounded structured output, selection/document limits, stale revisions, ambiguous matches, and proposal-only generation.
 - Playwright opens a real DOCX and tests both CLI UI paths with deterministic transport mocks, including explicit confirmation, editing, manual tracked application, localization, and Stop. These tests do not prove real provider availability or native IPC execution.
-- Optional live Codex testing uses only synthetic document text and the installed CLI. A successful local authentication check alone is not inference verification.
+- Optional live Codex testing uses only synthetic document text and the installed CLI. It verifies the app-server's resolved model during thread creation, but a successful local authentication or thread-start check alone is not inference verification.
+- Claude Code model suggestions are documented aliases, not account discovery. The model field accepts a trimmed custom ID and passes it as one `--model` argument; an empty value omits the override. Connection checks only validate installation/login. Generation availability still depends on the installed CLI, provider catalog, account access, and organization policy. This checkout's Claude Code CLI was logged out during verification, so no real Claude inference was run.
 - Native formatting, unit tests, Clippy and Windows packaging belong to the native build checks. The machine running them must have MSVC and the Windows SDK.
 
 ## Native startup

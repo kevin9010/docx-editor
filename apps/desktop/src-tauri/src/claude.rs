@@ -233,9 +233,12 @@ fn validate_request(request: &ClaudeRequest) -> Result<Option<String>, String> {
     if model.is_empty() {
         return Ok(None);
     }
+    // Allow one terminal Claude Code context suffix, not arbitrary brackets in names.
+    let name = model.strip_suffix("[1m]").unwrap_or(model);
     if model.len() > 200
-        || !model.as_bytes()[0].is_ascii_alphanumeric()
-        || !model.bytes().all(|byte| {
+        || name.is_empty()
+        || !name.as_bytes()[0].is_ascii_alphanumeric()
+        || !name.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()
                 || matches!(byte, b'-' | b'_' | b'.' | b':' | b'/' | b'@' | b'+')
         })
@@ -650,19 +653,87 @@ mod tests {
         }
         for model in [
             "--dangerously-skip-permissions",
+            "-sonnet[1m]",
+            "--model=opus",
             "opus --tools Bash",
             "\"opus\"",
+            "'opus'",
             "opus\n--debug",
+            "sonnet\tname",
+            "sonnet\0",
+            "sonnet\u{7f}",
+            "claudé",
+            "[1m]",
+            "[1m]sonnet",
+            "sonnet[1M]",
+            "sonnet[2m]",
+            "sonnet[200k]",
+            "sonnet[]",
+            "sonnet[1m",
+            "sonnet1m]",
+            "sonnet[[1m]]",
+            "sonnet[1m][1m]",
+            "sonnet[1m]-preview",
+            "sonnet[1m]/other",
+            "sonnet[1m] opus",
         ] {
             let mut input = request();
             input.model = Some(model.into());
+            assert!(validate_request(&input).is_err(), "accepted {model:?}");
+        }
+    }
+
+    #[test]
+    fn forwards_model_aliases_full_ids_and_custom_names_as_one_exact_argument() {
+        for model in [
+            "default",
+            "sonnet",
+            "opus",
+            "haiku",
+            "opusplan",
+            "claude-opus-5-5",
+            "magpie-1.anthropic.claude-opus-5-5",
+            "provider.example/custom_model:latest@region+preview",
+            "custom-future-model",
+            "sonnet[1m]",
+            "claude-opus-5-5[1m]",
+            "  sonnet[1m]  ",
+        ] {
+            let mut input = request();
+            input.model = Some(model.into());
+            let validated = validate_request(&input).unwrap();
+            assert_eq!(validated.as_deref(), Some(model.trim()));
+            let args = cli_args(true, validated.as_deref());
+            assert_eq!(args.iter().filter(|arg| *arg == "--model").count(), 1);
+            assert_eq!(&args[args.len() - 2..], ["--model", model.trim()]);
+        }
+    }
+
+    #[test]
+    fn omits_model_argument_for_unset_empty_and_whitespace_defaults() {
+        for model in [None, Some(""), Some(" \t\r\n ")] {
+            let mut input = request();
+            input.model = model.map(str::to_string);
+            let validated = validate_request(&input).unwrap();
+            assert_eq!(validated, None);
+            assert!(!cli_args(true, validated.as_deref())
+                .iter()
+                .any(|arg| arg == "--model"));
+        }
+    }
+
+    #[test]
+    fn bounds_model_bytes_including_context_suffix() {
+        for model in ["m".repeat(200), format!("{}[1m]", "m".repeat(196))] {
+            let mut input = request();
+            input.model = Some(model);
+            assert_eq!(validate_request(&input).unwrap(), input.model);
+        }
+        for model in ["m".repeat(201), format!("{}[1m]", "m".repeat(197))] {
+            let mut input = request();
+            input.model = Some(model);
             assert!(validate_request(&input).is_err());
         }
-        let mut input = request();
-        input.model = Some("magpie-1.anthropic.claude-opus-5-5".into());
-        assert_eq!(validate_request(&input).unwrap(), input.model);
-        input.model = Some(" ".into());
-        assert_eq!(validate_request(&input).unwrap(), None);
     }
 
     #[test]

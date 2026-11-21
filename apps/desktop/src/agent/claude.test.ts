@@ -87,6 +87,38 @@ describe('Claude CLI transport', () => {
 });
 
 describe('Claude document review', () => {
+  it.each([
+    ['', ''],
+    [' \t\r\n ', ''],
+    [' sonnet ', 'sonnet'],
+    [' opusplan ', 'opusplan'],
+    [' claude-opus-5-5 ', 'claude-opus-5-5'],
+    [' provider.example/custom_model:latest@region+preview ', 'provider.example/custom_model:latest@region+preview'],
+    [' custom-future-model ', 'custom-future-model'],
+    [' sonnet[1m] ', 'sonnet[1m]'],
+    [' claude-opus-5-5[1m] ', 'claude-opus-5-5[1m]'],
+  ])('forwards trimmed model %j as %j to claude_start', async (model, expected) => {
+    respond({ type: 'result', output: { summary: 'Model selection preserved.', suggestions: [] } });
+    const opts = options();
+    opts.model = model;
+    expect(await runClaudeAgent(opts)).toMatchObject({ status: 'completed', mutated: false });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith('claude_start', expect.objectContaining({
+      request: expect.objectContaining({ model: expected }),
+    }));
+  });
+
+  it('surfaces model policy errors without retrying an alternate model', async () => {
+    const message = 'The selected model is not permitted by the managed model policy.';
+    respond({ type: 'error', message });
+    const opts = options();
+    opts.model = 'sonnet[1m]';
+    expect(await runClaudeAgent(opts)).toMatchObject({ status: 'failed', summary: message, mutated: false });
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock.mock.calls[0][1].request.model).toBe('sonnet[1m]');
+    expect(opts.review?.proposals).toEqual([]);
+  });
+
   it('queues a pending suggestion without mutating or saving the document', async () => {
     respond({ type: 'result', output });
     const opts = options();

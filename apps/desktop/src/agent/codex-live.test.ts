@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
-import { CodexClient, runCodexAgent } from './codex';
+import { CodexClient, inspectCodex, runCodexAgent } from './codex';
 import { buildWritingPrompt } from './actions';
 import type { AgentDocument, AgentReviewSession } from './types';
 
@@ -41,10 +41,14 @@ it.skipIf(!process.env.SUPERDOC_TEST_CODEX)('uses installed Codex to propose a r
   try {
     await client.request('initialize', { clientInfo: { name: 'superdoc_desktop_test', version: '0.1.0' }, capabilities: { experimentalApi: true } });
     await client.send({ method: 'initialized', params: {} });
+    const connection = await inspectCodex(client, true);
+    console.log(`Codex model discovery: ${connection.models.length} model(s); signed in: ${connection.signedIn}`);
+    const selectedModel = process.env.SUPERDOC_TEST_MODEL?.trim() ?? '';
+    console.log(`Requested model: ${selectedModel || 'CLI default'}`);
     const started = Date.now();
     let previousStatus = '';
     const heartbeat = setInterval(() => console.log(`Waiting for Codex: ${Math.floor((Date.now() - started) / 1000)}s elapsed`), 10_000);
-    const result = await runCodexAgent(client, { document, review, model: '', baseUrl: '', apiKey: '', onStatus: (message) => { if (message !== previousStatus) console.log(`${Math.floor((Date.now() - started) / 1000)}s: ${message}`); previousStatus = message; }, prompt: academic ? buildWritingPrompt('academic', '', '', true) : 'This is a synthetic integration test. Call superdoc_inspect with includeText true, then call superdoc_perform_action to replace exactly "The fictional team are ready." with "The fictional team is ready.". This must be a proposed change for review, not an applied edit. End with one short sentence.' }).finally(() => clearInterval(heartbeat));
+    const result = await runCodexAgent(client, { document, review, model: selectedModel, timeLimitMs: 60_000, baseUrl: '', apiKey: '', onStatus: (message) => { if (message !== previousStatus) console.log(`${Math.floor((Date.now() - started) / 1000)}s: ${message}`); previousStatus = message; }, prompt: academic ? buildWritingPrompt('academic', '', '', true) : 'This is a synthetic integration test. Call superdoc_inspect with includeText true, then call superdoc_perform_action to replace exactly "The fictional team are ready." with "The fictional team is ready.". This must be a proposed change for review, not an applied edit. End with one short sentence.' }).finally(() => clearInterval(heartbeat));
     expect(result.status, result.summary).toBe('completed');
     if (academic) {
       expect(review.proposals).toHaveLength(1);

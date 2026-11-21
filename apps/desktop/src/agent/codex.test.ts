@@ -1,10 +1,117 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CodexClient, runCodexAgent, type RpcMessage } from './codex';
+import { CodexClient, inspectCodex, runCodexAgent, type RpcMessage } from './codex';
 import type { AgentDocument, AgentRunOptions } from './types';
 
 function options(): AgentRunOptions {
   return { document: { info: vi.fn(async () => ({ revision: 'r1' })), getText: vi.fn(async () => 'Fictional sentence.') } as unknown as AgentDocument, review: { revision: 'r1', proposals: [] }, prompt: 'Inspect', model: '', baseUrl: '', apiKey: '' };
 }
+
+function completedRunClient() {
+  const sent: RpcMessage[] = [];
+  const close = vi.fn(async () => {});
+  let threadCount = 0;
+  const client = new CodexClient({ close, send: async (message) => {
+    sent.push(message);
+    if (message.method === 'thread/start') {
+      client.receive({ id: message.id, result: { thread: { id: `thread-${++threadCount}` } } });
+    }
+    if (message.method === 'turn/start') {
+      client.receive({ id: message.id, result: { turn: { id: `turn-${threadCount}` } } });
+      client.receive({ method: 'turn/completed', params: { threadId: message.params?.threadId, turn: { status: 'completed' } } });
+    }
+    if (message.method === 'thread/unsubscribe') client.receive({ id: message.id, result: {} });
+  } });
+  return { client, sent, close };
+}
+
+describe('Codex model selection', () => {
+  it('omits the model for the CLI default without discovering or selecting a model', async () => {
+    const { client, sent } = completedRunClient();
+    expect((await runCodexAgent(client, options())).status).toBe('completed');
+    expect(sent.find((message) => message.method === 'thread/start')?.params).not.toHaveProperty('model');
+    expect(sent.map((message) => message.method)).toEqual(['thread/start', 'turn/start', 'thread/unsubscribe']);
+    await client.close();
+  });
+
+  it('forwards an arbitrary full custom model identifier exactly without a discovered-model allowlist', async () => {
+    const { client, sent } = completedRunClient();
+    const model = 'custom-provider/docx-review-2099-11-20:preview@v2';
+    expect((await runCodexAgent(client, { ...options(), model })).status).toBe('completed');
+    expect(sent.find((message) => message.method === 'thread/start')?.params).toHaveProperty('model', model);
+    expect(sent.some((message) => message.method === 'model/list')).toBe(false);
+    await client.close();
+  });
+
+  it.each([
+    ['custom-provider/reviewer-v1', 'another-provider/reviewer-v2'],
+    ['custom-provider/reviewer-v1', ''],
+  ])('respects model changes from %j to %j on the same warm client', async (firstModel, secondModel) => {
+    const { client, sent, close } = completedRunClient();
+    for (const model of [firstModel, secondModel]) {
+      expect((await runCodexAgent(client, { ...options(), model })).status).toBe('completed');
+      expect(client.isClosed).toBe(false);
+    }
+    const threads = sent.filter((message) => message.method === 'thread/start');
+    expect(threads.map((message) => message.params?.model)).toEqual([firstModel, secondModel || undefined]);
+    if (!secondModel) expect(threads[1].params).not.toHaveProperty('model');
+    expect(sent.filter((message) => message.method === 'turn/start').map((message) => message.params?.threadId)).toEqual(['thread-1', 'thread-2']);
+    expect(sent.filter((message) => message.method === 'thread/unsubscribe').map((message) => message.params?.threadId)).toEqual(['thread-1', 'thread-2']);
+    expect(close).not.toHaveBeenCalled();
+    await client.close();
+  });
+});
+
+describe('Codex model normalization', () => {
+  it.each([' ', '\t\r\n', '   '])('uses the CLI default for whitespace-only model %j', async (model) => {
+    const { client, sent } = completedRunClient();
+    expect((await runCodexAgent(client, { ...options(), model })).status).toBe('completed');
+    expect(sent.find((message) => message.method === 'thread/start')?.params).not.toHaveProperty('model');
+    await client.close();
+  });
+
+  it('trims surrounding whitespace while preserving the full custom model identifier', async () => {
+    const { client, sent } = completedRunClient();
+    const model = 'custom-provider/docx-review-2099-11-20:preview@v2';
+    expect((await runCodexAgent(client, { ...options(), model: ` \t${model}\r\n` })).status).toBe('completed');
+    expect(sent.find((message) => message.method === 'thread/start')?.params).toHaveProperty('model', model);
+    await client.close();
+  });
+});
+
+describe('Codex model discovery', () => {
+  it.each([
+    { account: { id: 'fixture-account' }, requiresOpenaiAuth: true, signedIn: true },
+    { account: null, requiresOpenaiAuth: false, signedIn: true },
+    { account: null, requiresOpenaiAuth: true, signedIn: false },
+  ])('skips model discovery and preserves sign-in status for %j', async ({ account, requiresOpenaiAuth, signedIn }) => {
+    const sent: RpcMessage[] = [];
+    const client = new CodexClient({ close: vi.fn(async () => {}), send: async (message) => {
+      sent.push(message);
+      client.receive({ id: message.id, result: { account, requiresOpenaiAuth } });
+    } }, 'fixture-codex');
+    expect(await inspectCodex(client, false)).toEqual({ executable: 'fixture-codex', signedIn, models: [] });
+    expect(sent).toEqual([{ id: 1, method: 'account/read', params: { refreshToken: false } }]);
+    await client.close();
+  });
+
+  it('follows model pagination cursors without replacing custom or default model identifiers', async () => {
+    const sent: RpcMessage[] = [];
+    const first = { model: 'custom-provider/first:preview', displayName: 'First', isDefault: false };
+    const second = { model: 'custom-provider/second@v2', displayName: 'Second', isDefault: true };
+    const client = new CodexClient({ close: vi.fn(async () => {}), send: async (message) => {
+      sent.push(message);
+      const result = message.method === 'account/read'
+        ? { account: null, requiresOpenaiAuth: false }
+        : message.params?.cursor === 'page-2'
+          ? { data: [second], nextCursor: null }
+          : { data: [first], nextCursor: 'page-2' };
+      client.receive({ id: message.id, result });
+    } }, 'fixture-codex');
+    expect(await inspectCodex(client)).toEqual({ executable: 'fixture-codex', signedIn: true, models: [first, second] });
+    expect(sent.filter((message) => message.method === 'model/list').map((message) => message.params)).toEqual([{ limit: 100 }, { limit: 100, cursor: 'page-2' }]);
+    await client.close();
+  });
+});
 
 describe('Codex app-server bridge client', () => {
   afterEach(() => vi.useRealTimers());
