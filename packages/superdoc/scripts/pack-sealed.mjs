@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash, randomBytes } from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { execPackageManagerSync, spawnPackageManagerSync } from '../../../scripts/lib/package-manager-command.mjs';
 import {
   constants as fsConstants,
   copyFileSync,
@@ -45,7 +46,7 @@ const PACKED_MANIFEST_FILES = Object.freeze([...PACKED_DIRECTORIES, ...PACKED_FI
 const SEMVER_PATTERN =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 
-export function readPnpmDefaultCatalog({ packageRoot = PACKAGE_ROOT, exec = execFileSync } = {}) {
+export function readPnpmDefaultCatalog({ packageRoot = PACKAGE_ROOT, exec = execPackageManagerSync } = {}) {
   let output;
   try {
     output = exec('pnpm', ['config', 'get', 'catalog', '--json'], {
@@ -185,7 +186,7 @@ function createPackStage({ packageRoot, stageRoot, publicReceipt, surfaceRoots, 
 }
 
 /** Run the package manager with lifecycle scripts disabled. */
-export function runPnpmPack({ stageRoot, packDestination, spawn = spawnSync }) {
+export function runPnpmPack({ stageRoot, packDestination, spawn = spawnPackageManagerSync }) {
   mkdirSync(packDestination, { recursive: true });
   const result = spawn('pnpm', ['pack', '--config.ignore-scripts=true', '--pack-destination', packDestination], {
     cwd: stageRoot,

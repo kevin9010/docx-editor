@@ -40,6 +40,10 @@ which of them are legitimate local copies and which are drift. Do not create the
 directory to hold something merely because two places use it; the owner and the
 reason come first.
 
+The `consumer-typecheck/src/browser-document-api-public.ts` fixture pins the public
+`BrowserDocumentApi` parameter and return shapes used by browser hosts such as the
+Tauri desktop adapter.
+
 Fixtures are synthetic by default. A `.docx` is a zip archive, so a text-based
 secret scanner reads its compressed bytes and finds nothing: `pnpm
 check:docx-privacy` opens every tracked `.docx` and reads the identity-bearing

@@ -3,6 +3,7 @@ let commentInputSequence = 0;
 </script>
 
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -10,6 +11,8 @@ import { useCommentsStore } from '../../stores/comments-store';
 import type { User } from '../../core/types/index.js';
 import CommentHeader from './CommentHeader.vue';
 import type { CommentModel } from './use-comment';
+
+const { t } = useUiTranslation();
 
 type InputConfig = { readOnly?: boolean; allowResolve?: boolean };
 
@@ -233,7 +236,7 @@ defineExpose({ focus });
           :aria-activedescendant="activeMentionOptionId"
           data-sd-comment-mention-input
           data-sd-comment-text
-          placeholder="Add a comment"
+          :placeholder="t('Add a comment')"
           rows="1"
           @input="onInput"
           @keydown="onKeydown"

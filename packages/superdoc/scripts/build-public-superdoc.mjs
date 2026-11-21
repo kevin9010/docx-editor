@@ -53,12 +53,29 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * On Windows `pnpm` is a .cmd shim, which Node cannot spawn directly - the
+ * call fails with ENOENT before the child ever starts. pnpm exports its own
+ * CLI entry point to lifecycle scripts as npm_execpath, so run that entry with
+ * the current Node binary instead. Falling back to a shell keeps the command
+ * working when the script is invoked outside a package-manager lifecycle.
+ */
+function resolvePnpmInvocation(command, commandArgs) {
+  const pnpmEntry = process.env.npm_execpath;
+  if (command === 'pnpm' && pnpmEntry && /\.[cm]?js$/i.test(pnpmEntry)) {
+    return { command: process.execPath, args: [pnpmEntry, ...commandArgs], shell: false };
+  }
+  return { command, args: commandArgs, shell: process.platform === 'win32' };
+}
+
 function run(command, commandArgs, { env = process.env } = {}) {
+  const invocation = resolvePnpmInvocation(command, commandArgs);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, commandArgs, {
+    const child = spawn(invocation.command, invocation.args, {
       cwd: PACKAGE_ROOT,
       stdio: 'inherit',
       env: { ...env, [BUILD_ORCHESTRATED_ENV]: '1' },
+      shell: invocation.shell,
     });
     child.on('error', reject);
     child.on('exit', (code, signal) => {

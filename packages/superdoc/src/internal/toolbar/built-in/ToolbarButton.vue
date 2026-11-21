@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import ToolbarButtonIcon from './ToolbarButtonIcon.vue';
 import { ref, computed, nextTick, watch, getCurrentInstance } from 'vue';
 import type { ComponentPublicInstance, MaybeRef, PropType, Ref, StyleValue } from 'vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 import type { BuiltInToolbar } from '../built-in-toolbar.js';
+
+const { t } = useUiTranslation();
 
 interface ToolbarButtonItem {
   name: Ref<string>;
@@ -257,7 +260,7 @@ const caretIcon = computed(() => {
     :class="['sd-toolbar-item', attributes.className]"
     :style="style"
     :role="isOverflowItem ? 'menuitem' : 'button'"
-    :aria-label="attributes.ariaLabel"
+    :aria-label="t(attributes.ariaLabel ?? '')"
     :aria-disabled="disabled ? 'true' : undefined"
     data-sd-part="toolbar-item"
     @click="handleOuterClick"
@@ -293,7 +296,7 @@ const caretIcon = computed(() => {
         v-if="isSplit"
         class="sd-toolbar-button__caret"
         :data-item="`btn-${name || ''}-caret`"
-        :aria-label="`${attributes.ariaLabel} options`"
+        :aria-label="t(`${attributes.ariaLabel} options`)"
         role="button"
       >
         <div class="sd-dropdown-caret" v-html="caretIcon" :style="{ opacity: disabled ? 0.6 : 1 }"></div>

@@ -1830,6 +1830,10 @@ export interface SuperDocUIScope {
  * disabled or return stable failure / noop results.
  */
 export interface SuperDocUI {
+  /** Read the language of this instance's built-in UI. */
+  getLocale(): 'en' | 'zh-CN';
+  /** Change UI copy without reopening the document or clearing its history. */
+  setLocale(locale: 'en' | 'zh-CN'): void;
   /** Subscribe to a derived slice of controller state. */
   select<TSlice>(selector: SelectorFn<SuperDocUIState, TSlice>, equality?: EqualityFn<TSlice>): Subscribable<TSlice>;
   /** Read the current aggregate state. */

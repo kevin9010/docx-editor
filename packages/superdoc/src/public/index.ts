@@ -47,6 +47,7 @@ export type { DocumentSource } from '../core/types/index.js';
 export type { DocumentUploadSource } from '../core/types/index.js';
 export type { StructuredDocumentSource } from '../core/types/index.js';
 export type { DocumentApi } from '@superdoc/document-api';
+export type { BrowserDocumentApi, PartialBrowserDocumentApi } from './browser-document-api.js';
 export type {
   DiffApplyEligibility,
   DiffApplyEligibilityBlocker,

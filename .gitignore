@@ -12,6 +12,10 @@ dist-devapp
 dist-ssr
 dist-types
 companion-dist
+
+# Tauri native build and portable packaging outputs
+**/src-tauri/target/
+artifacts/desktop/
 packages/sdk/langs/python/platforms/*/build/
 *.local
 .env

@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { onMounted, ref, watch } from 'vue';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 
 import { toolbarIcons } from './toolbarIcons.js';
+
+const { t } = useUiTranslation();
 
 const { isHighContrastMode } = useHighContrastMode();
 const emit = defineEmits(['select']);
@@ -87,7 +90,7 @@ onMounted(() => {
       v-html="button.icon"
       data-item="btn-textAlign-option"
       role="menuitem"
-      :aria-label="button.ariaLabel"
+      :aria-label="t(button.ariaLabel)"
       ref="alignmentButtonsRefs"
       @keydown.prevent="(event) => handleKeyDown(event, index)"
     ></div>

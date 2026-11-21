@@ -20,7 +20,7 @@
  * Pages are build artifacts rather than committed files, so this runs the
  * generator first instead of trusting whatever a workspace happens to have.
  */
-import { execFileSync } from 'node:child_process';
+import { execPackageManagerSync } from '../../../scripts/lib/package-manager-command.mjs';
 import { readFile, readdir } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { buildContractSnapshot } from './lib/contract-snapshot.js';
@@ -54,7 +54,7 @@ async function collectRenderedPages(directory: string): Promise<string[]> {
 }
 
 runScript('documented operation coverage check', async () => {
-  execFileSync('pnpm', ['run', 'generate:reference'], { cwd: DOCS_APP, stdio: 'pipe' });
+  execPackageManagerSync('pnpm', ['run', 'generate:reference'], { cwd: DOCS_APP, stdio: 'pipe' });
 
   const model = JSON.parse(await readFile(REFERENCE_MODEL, 'utf8')) as ReferenceModel;
   const rendered = new Set(await collectRenderedPages(REFERENCE_PAGES));

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { ref, computed } from 'vue';
 import type { PropType } from 'vue';
 import type {
@@ -7,6 +8,8 @@ import type {
   SurfaceMode,
   SurfaceRequest,
 } from '../../core/types/index.js';
+
+const { t } = useUiTranslation();
 
 const props = defineProps({
   // Reserved surface props (injected by SurfaceDialog)
@@ -64,23 +67,23 @@ function handleCancel() {
 
 <template>
   <div class="sd-password-prompt" @keydown.enter.prevent="handleSubmit">
-    <h3 :id="`sd-password-prompt-heading-${surfaceId}`" class="sd-password-prompt__heading">{{ heading }}</h3>
-    <p class="sd-password-prompt__description">{{ passwordPrompt.texts.description }}</p>
+    <h3 :id="`sd-password-prompt-heading-${surfaceId}`" class="sd-password-prompt__heading">{{ t(heading) }}</h3>
+    <p class="sd-password-prompt__description">{{ t(passwordPrompt.texts.description) }}</p>
 
     <div class="sd-password-prompt__field">
       <input
         v-model="password"
         type="password"
         class="sd-password-prompt__input"
-        :placeholder="passwordPrompt.texts.placeholder"
+        :placeholder="t(passwordPrompt.texts.placeholder)"
         :disabled="isBusy"
         autocomplete="current-password"
-        :aria-label="passwordPrompt.texts.inputAriaLabel"
+        :aria-label="t(passwordPrompt.texts.inputAriaLabel)"
       />
     </div>
 
     <p v-if="errorMessage" class="sd-password-prompt__error" role="alert">
-      {{ errorMessage }}
+      {{ t(errorMessage) }}
     </p>
 
     <div class="sd-password-prompt__actions">
@@ -90,7 +93,7 @@ function handleCancel() {
         :disabled="isBusy"
         @click="handleCancel"
       >
-        {{ passwordPrompt.texts.cancelLabel }}
+        {{ t(passwordPrompt.texts.cancelLabel) }}
       </button>
       <button
         type="button"
@@ -98,7 +101,7 @@ function handleCancel() {
         :disabled="!canSubmit"
         @click="handleSubmit"
       >
-        {{ isBusy ? passwordPrompt.texts.busyLabel : passwordPrompt.texts.submitLabel }}
+        {{ isBusy ? t(passwordPrompt.texts.busyLabel) : t(passwordPrompt.texts.submitLabel) }}
       </button>
     </div>
   </div>

@@ -1,0 +1,147 @@
+import { requestModelTurn, type ChatCompletionStreamEvent, type ModelTurn } from './endpoint';
+import { withAbort } from './cancellation';
+import { dispatchAgentTool, AGENT_SYSTEM_PROMPT, AGENT_TOOLS, toolResultMessage } from './tools';
+import type { AgentAssistantMessage, AgentMessages, AgentRunOptions, AgentRunResult } from './types';
+
+const DEFAULT_MAX_TURNS = 8;
+const MAX_TURNS_LIMIT = 24;
+const MAX_TOOL_CALLS_PER_TURN = 4;
+
+function assistantMessage(message: AgentAssistantMessage): AgentMessages[number] {
+  return {
+    role: 'assistant',
+    content: message.content,
+    ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}),
+    ...(message.anthropic_content ? { anthropic_content: message.anthropic_content } : {}),
+  };
+}
+
+/** A turn the loop must not continue: the provider refused, or cut a tool call off mid-input. */
+function stoppedTurn(turn: ModelTurn, hasToolCalls: boolean): string | null {
+  if (turn.stopReason === 'refusal') {
+    return `The model declined this request${turn.stopDetail ? `: ${turn.stopDetail}` : '.'} Rephrase the instruction or choose another model.`;
+  }
+  if (hasToolCalls && (turn.stopReason === 'max_tokens' || turn.stopReason === 'length')) {
+    return 'The model reached its output limit before finishing a document tool call. Select a shorter passage and try again.';
+  }
+  return null;
+}
+
+export async function runDocumentAgent(options: AgentRunOptions): Promise<AgentRunResult> {
+  const maxTurns = Math.max(1, Math.min(options.maxTurns ?? DEFAULT_MAX_TURNS, MAX_TURNS_LIMIT));
+  const messages: AgentMessages = [
+    { role: 'system', content: AGENT_SYSTEM_PROMPT },
+    { role: 'user', content: options.prompt },
+  ];
+  let mutated = false;
+
+  for (let turn = 1; turn <= maxTurns; turn += 1) {
+    if (options.signal?.aborted) {
+      return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn - 1, mutated };
+    }
+    options.onStatus?.(`Asking the model (turn ${turn}/${maxTurns})…`);
+
+    let streamed = '';
+    let receiving = false;
+    const onEvent = (event: ChatCompletionStreamEvent) => {
+      if (options.signal?.aborted) return;
+      options.onActivity?.();
+      if (event.type === 'delta') {
+        streamed += event.content;
+        if (!receiving) {
+          receiving = true;
+          options.onStatus?.('Receiving the model response…');
+        }
+        options.onText?.(streamed);
+      } else if (event.type === 'tool') {
+        options.onStatus?.(`The model is preparing ${event.name}…`);
+      }
+    };
+
+    let response: ModelTurn;
+    try {
+      response = await withAbort(requestModelTurn({
+        format: options.apiFormat ?? 'openai',
+        baseUrl: options.baseUrl,
+        apiKey: options.apiKey,
+        authScheme: options.authScheme,
+        model: options.model,
+        messages,
+        tools: AGENT_TOOLS,
+      }, onEvent, options.signal), options.signal);
+    } catch (error) {
+      return {
+        status: options.signal?.aborted ? 'aborted' : 'failed',
+        summary: error instanceof Error ? error.message : 'The model request failed.',
+        turns: turn,
+        mutated,
+      };
+    }
+    if (options.signal?.aborted) return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn, mutated };
+    const { message } = response;
+    options.onActivity?.();
+
+    messages.push(assistantMessage(message));
+    if (message.content && message.content !== streamed) options.onText?.(message.content);
+    const calls = message.tool_calls ?? [];
+    const stopped = stoppedTurn(response, calls.length > 0);
+    if (stopped) return { status: 'failed', summary: stopped, turns: turn, mutated };
+    if (calls.length === 0) {
+      return {
+        status: 'completed',
+        summary: message.content?.trim() || 'The Agent completed without a final message.',
+        turns: turn,
+        mutated,
+      };
+    }
+
+    if (calls.length > MAX_TOOL_CALLS_PER_TURN) {
+      return {
+        status: 'failed',
+        summary:
+          `The Agent requested ${calls.length} tool calls in one turn; `
+          + `the safety limit is ${MAX_TOOL_CALLS_PER_TURN}.`,
+        turns: turn,
+        mutated,
+      };
+    }
+
+    for (const call of calls) {
+      if (options.signal?.aborted) {
+        return { status: 'aborted', summary: 'The Agent run was cancelled.', turns: turn, mutated };
+      }
+      options.onStatus?.(`Running ${call.function.name}…`);
+      let parsedInput: unknown;
+      try {
+        parsedInput = JSON.parse(call.function.arguments);
+      } catch {
+        parsedInput = null;
+      }
+      let result;
+      try {
+        result = await dispatchAgentTool(
+          { document: options.document, signal: options.signal, review: options.review },
+          call.function.name,
+          parsedInput,
+        );
+      } catch (error) {
+        result = {
+          status: 'failed' as const,
+          message: error instanceof Error ? error.message : 'The document tool failed.',
+        };
+      }
+      if (result.status === 'applied' && result.receipt) mutated = true;
+      messages.push(toolResultMessage(call.id, result));
+      options.onStatus?.(result.status === 'proposed' ? 'Suggestion ready. Waiting for the model to finish; you can stop and review now.' : result.message ?? 'Document context read.');
+    }
+  }
+
+  const suggestions = options.review?.proposals.length ?? 0;
+  return {
+    status: 'max_turns',
+    summary: `The Agent used all ${maxTurns} turns before finishing. ${suggestions} suggestion(s) are ready for review; `
+      + 'run it again for the remaining text or select a smaller passage.',
+    turns: maxTurns,
+    mutated,
+  };
+}

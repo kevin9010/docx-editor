@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { ref, onMounted, computed } from 'vue';
 import type { PropType } from 'vue';
 import type { FindReplaceHandle, SurfaceComponentProps, SurfaceMode, SurfaceRequest } from '../../core/types/index.js';
+
+const { t } = useUiTranslation();
 
 const props = defineProps({
   // Reserved surface props (injected by SurfaceFloating)
@@ -144,8 +147,8 @@ onMounted(() => {
         type="button"
         class="sd-find-replace__btn sd-find-replace__btn--expander"
         :class="{ 'sd-find-replace__btn--expander-open': findReplace.showReplace.value }"
-        :title="findReplace.texts.toggleReplaceLabel"
-        :aria-label="findReplace.texts.toggleReplaceAriaLabel"
+        :title="t(findReplace.texts.toggleReplaceLabel)"
+        :aria-label="t(findReplace.texts.toggleReplaceAriaLabel)"
         :aria-expanded="findReplace.showReplace.value ? 'true' : 'false'"
         @click="findReplace.showReplace.value = !findReplace.showReplace.value"
       >
@@ -175,12 +178,12 @@ onMounted(() => {
           type="text"
           class="sd-find-replace__input sd-find-replace__input--search"
           data-sd-autofocus
-          :placeholder="findReplace.texts.findPlaceholder"
-          :aria-label="findReplace.texts.findAriaLabel"
+          :placeholder="t(findReplace.texts.findPlaceholder)"
+          :aria-label="t(findReplace.texts.findAriaLabel)"
           @keydown="handleFindKeydown"
         />
         <span v-if="findReplace.findQuery.value && !searchErrorText" class="sd-find-replace__count">{{
-          findReplace.matchLabel.value
+          t(findReplace.matchLabel.value)
         }}</span>
         <!-- Query-scoped toggles live inside the field so they read as
              properties of the query, and the popover stays one row tall. -->
@@ -188,39 +191,39 @@ onMounted(() => {
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--toggle"
           :class="{ 'sd-find-replace__btn--active': findReplace.caseSensitive.value }"
-          :title="findReplace.texts.matchCaseAriaLabel"
-          :aria-label="findReplace.texts.matchCaseAriaLabel"
+          :title="t(findReplace.texts.matchCaseAriaLabel)"
+          :aria-label="t(findReplace.texts.matchCaseAriaLabel)"
           :aria-pressed="findReplace.caseSensitive.value ? 'true' : 'false'"
           @mousedown.prevent
           @click="findReplace.caseSensitive.value = !findReplace.caseSensitive.value"
         >
-          {{ findReplace.texts.matchCaseLabel }}
+          {{ t(findReplace.texts.matchCaseLabel) }}
         </button>
         <button
           v-if="showIgnoreDiacritics"
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--toggle"
           :class="{ 'sd-find-replace__btn--active': findReplace.ignoreDiacritics.value }"
-          :title="findReplace.texts.ignoreDiacriticsAriaLabel"
-          :aria-label="findReplace.texts.ignoreDiacriticsAriaLabel"
+          :title="t(findReplace.texts.ignoreDiacriticsAriaLabel)"
+          :aria-label="t(findReplace.texts.ignoreDiacriticsAriaLabel)"
           :aria-pressed="findReplace.ignoreDiacritics.value ? 'true' : 'false'"
           @mousedown.prevent
           @click="findReplace.ignoreDiacritics.value = !findReplace.ignoreDiacritics.value"
         >
-          {{ findReplace.texts.ignoreDiacriticsLabel }}
+          {{ t(findReplace.texts.ignoreDiacriticsLabel) }}
         </button>
         <button
           v-if="showRegexToggle"
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--toggle"
           :class="{ 'sd-find-replace__btn--active': findReplace.regex.value }"
-          :title="findReplace.texts.regexAriaLabel"
-          :aria-label="findReplace.texts.regexAriaLabel"
+          :title="t(findReplace.texts.regexAriaLabel)"
+          :aria-label="t(findReplace.texts.regexAriaLabel)"
           :aria-pressed="findReplace.regex.value ? 'true' : 'false'"
           @mousedown.prevent
           @click="findReplace.regex.value = !findReplace.regex.value"
         >
-          {{ findReplace.texts.regexLabel }}
+          {{ t(findReplace.texts.regexLabel) }}
         </button>
       </div>
 
@@ -229,8 +232,8 @@ onMounted(() => {
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--icon"
           :disabled="!findReplace.hasMatches.value"
-          :title="findReplace.texts.previousMatchLabel"
-          :aria-label="findReplace.texts.previousMatchAriaLabel"
+          :title="t(findReplace.texts.previousMatchLabel)"
+          :aria-label="t(findReplace.texts.previousMatchAriaLabel)"
           @click="handleGoPrev()"
         >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -248,8 +251,8 @@ onMounted(() => {
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--icon"
           :disabled="!findReplace.hasMatches.value"
-          :title="findReplace.texts.nextMatchLabel"
-          :aria-label="findReplace.texts.nextMatchAriaLabel"
+          :title="t(findReplace.texts.nextMatchLabel)"
+          :aria-label="t(findReplace.texts.nextMatchAriaLabel)"
           @click="handleGoNext()"
         >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -267,8 +270,8 @@ onMounted(() => {
         <button
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--icon"
-          :title="findReplace.texts.closeLabel"
-          :aria-label="findReplace.texts.closeAriaLabel"
+          :title="t(findReplace.texts.closeLabel)"
+          :aria-label="t(findReplace.texts.closeAriaLabel)"
           @click="handleClose"
         >
           <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -293,8 +296,8 @@ onMounted(() => {
           @input="handleReplaceInput"
           type="text"
           class="sd-find-replace__input"
-          :placeholder="findReplace.texts.replacePlaceholder"
-          :aria-label="findReplace.texts.replaceAriaLabel"
+          :placeholder="t(findReplace.texts.replacePlaceholder)"
+          :aria-label="t(findReplace.texts.replaceAriaLabel)"
           @keydown.enter.prevent="findReplace.replaceCurrent()"
         />
       </div>
@@ -304,19 +307,19 @@ onMounted(() => {
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--action"
           :disabled="replaceDisabled"
-          :title="findReplace.texts.replaceLabel"
+          :title="t(findReplace.texts.replaceLabel)"
           @click="findReplace.replaceCurrent()"
         >
-          {{ findReplace.texts.replaceLabel }}
+          {{ t(findReplace.texts.replaceLabel) }}
         </button>
         <button
           type="button"
           class="sd-find-replace__btn sd-find-replace__btn--action"
           :disabled="replaceAllDisabled"
-          :title="findReplace.texts.replaceAllLabel"
+          :title="t(findReplace.texts.replaceAllLabel)"
           @click="findReplace.replaceAll()"
         >
-          {{ findReplace.texts.replaceAllLabel }}
+          {{ t(findReplace.texts.replaceAllLabel) }}
         </button>
       </div>
     </div>
@@ -324,7 +327,7 @@ onMounted(() => {
     <!-- Inline invalid-pattern error -->
     <div v-if="searchErrorText" class="sd-find-replace__error" role="alert">
       <span v-if="showReplaceControls" class="sd-find-replace__row-indent" aria-hidden="true"></span>
-      <span class="sd-find-replace__error-text">{{ searchErrorText }}</span>
+      <span class="sd-find-replace__error-text">{{ t(searchErrorText) }}</span>
     </div>
   </div>
 </template>

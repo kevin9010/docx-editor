@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import type { ComponentPublicInstance, CSSProperties, PropType, Ref, StyleValue } from 'vue';
 import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 import { computeTypeahead, findPrefixMatchIndex } from './font-typeahead.js';
+
+const { t } = useUiTranslation();
 
 export interface ComboBoxOption {
   key: string;
@@ -88,7 +91,7 @@ const optionLabels = computed(() => options.value.map((option) => String(option?
 const appliedLabel = computed(() => String(props.item.label?.value ?? ''));
 const disabled = computed(() => Boolean(props.item.disabled?.value));
 const itemName = computed(() => String(props.item.name?.value ?? ''));
-const ariaLabel = computed(() => props.item.attributes?.value?.ariaLabel ?? 'Font family');
+const ariaLabel = computed(() => t(props.item.attributes?.value?.ariaLabel ?? 'Font family'));
 
 const boundValue = computed(() => (isEditing.value ? inputDisplay.value : appliedLabel.value));
 
@@ -569,7 +572,7 @@ watch(
       class="sd-font-combobox__caret sd-toolbar-split-field__caret"
       :data-item="`btn-${itemName}-toggle`"
       tabindex="-1"
-      :aria-label="`${ariaLabel} options`"
+      :aria-label="t(`${ariaLabel} options`)"
       :disabled="disabled"
       @mousedown="onCaretMousedown"
     >

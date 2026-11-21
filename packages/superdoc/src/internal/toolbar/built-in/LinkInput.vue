@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../ui-i18n.js';
 import { ref, computed, onMounted } from 'vue';
 import type { PropType, Ref } from 'vue';
 import { sanitizeHref } from './url-safety.js';
@@ -6,6 +7,8 @@ import { toolbarIcons } from './toolbarIcons.js';
 import { useHighContrastMode } from '../../../composables/use-high-contrast-mode';
 import { executeFirstPartyCommandAsync } from '../../../public/ui/create-super-doc-ui.js';
 import type { CommandExecutionResult, SuperDocUI } from '../../../public/ui/types.js';
+
+const { t } = useUiTranslation();
 
 type LinkInputUI = Partial<Pick<SuperDocUI, 'selection' | 'toolbar' | 'document'>> & Pick<SuperDocUI, 'commands'>;
 
@@ -274,10 +277,10 @@ const navigateToAnchor = async (anchorUrl: string) => {
 
 <template>
   <div class="link-input-ctn" :class="{ 'high-contrast': isHighContrastMode }">
-    <div class="link-title" v-if="isAnchor">Page anchor</div>
-    <div class="link-title" v-else-if="isViewingMode">Link details</div>
-    <div class="link-title" v-else-if="isEditing">Edit link</div>
-    <div class="link-title" v-else>Add link</div>
+    <div class="link-title" v-if="isAnchor">{{ t('Page anchor') }}</div>
+    <div class="link-title" v-else-if="isViewingMode">{{ t('Link details') }}</div>
+    <div class="link-title" v-else-if="isEditing">{{ t('Edit link') }}</div>
+    <div class="link-title" v-else>{{ t('Add link') }}</div>
 
     <div v-if="showInput && !isAnchor" class="link-input-wrapper">
       <!-- Text input -->
@@ -286,7 +289,7 @@ const navigateToAnchor = async (anchorUrl: string) => {
         <input
           type="text"
           name="text"
-          placeholder="Text"
+          :placeholder="t('Text')"
           v-model="text"
           :readonly="isViewingMode"
           @keydown.enter.stop.prevent="handleSubmit"
@@ -299,7 +302,7 @@ const navigateToAnchor = async (anchorUrl: string) => {
         <input
           type="text"
           name="link"
-          placeholder="Type or paste a link"
+          :placeholder="t('Type or paste a link')"
           :class="{ 'sd-error': urlError }"
           v-model="rawUrl"
           :readonly="isViewingMode"
@@ -325,7 +328,7 @@ const navigateToAnchor = async (anchorUrl: string) => {
           data-item="btn-link-remove"
         >
           <div class="remove-btn__icon" v-html="toolbarIcons.removeLink"></div>
-          Remove
+          {{ t('Remove') }}
         </button>
         <button
           class="sd-submit-btn"
@@ -334,7 +337,7 @@ const navigateToAnchor = async (anchorUrl: string) => {
           :disabled="isSubmitting"
           data-item="btn-link-apply"
         >
-          Apply
+          {{ t('Apply') }}
         </button>
       </div>
       <div v-if="commandError" role="alert" class="sd-error">{{ commandError }}</div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ref,
+  watch,
   getCurrentInstance,
   onMounted,
   onActivated,
@@ -11,6 +12,7 @@ import {
   provide,
 } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
+import { useUiTranslation } from '../../ui-i18n.js';
 import { throttle } from './helpers.js';
 import ButtonGroup from './ButtonGroup.vue';
 import { preventEditorFocusTransfer } from './toolbar-focus-helpers.js';
@@ -57,6 +59,8 @@ function resolveToolbar(): ToolbarHost {
   return host;
 }
 const toolbar = resolveToolbar();
+const { locale, t } = useUiTranslation();
+watch(locale, () => toolbar.onToolbarResize());
 provide('sdToolbarOwnerId', getSuperDocUiOwnerId(toolbar.superdoc));
 const emit = defineEmits(['command', 'toggle', 'select']);
 
@@ -237,7 +241,7 @@ const handleToolbarMousedown = (e: MouseEvent) => {
     ref="toolbarRoot"
     :key="toolbarKey"
     role="toolbar"
-    aria-label="Toolbar"
+    :aria-label="t('Toolbar')"
     data-sd-part="toolbar"
     data-editor-ui-surface
     :data-superdoc-ui-owner="getSuperDocUiOwnerId(toolbar.superdoc)"

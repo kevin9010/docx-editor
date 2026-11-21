@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUiTranslation } from '../../internal/ui-i18n.js';
 import { formatDate } from './helpers';
 import { superdocIcons } from '../../icons.js';
 import { computed } from 'vue';
@@ -12,6 +13,8 @@ import { useSuperDocInstance } from '../../composables/use-superdoc-instance';
 import CommentsDropdown from './CommentsDropdown.vue';
 import { trackedChangeThreadParentIdForComment } from './tracked-change-threading.js';
 import type { CommentModel } from './use-comment';
+
+const { t } = useUiTranslation();
 
 type HeaderConfig = { readOnly?: boolean; allowResolve?: boolean };
 
@@ -264,7 +267,7 @@ const getOverflowOptions = computed(() => {
     options.add('delete');
   }
 
-  options.forEach((option) => allowedOptions.push(OVERFLOW_OPTIONS[option]));
+  options.forEach((option) => allowedOptions.push({ ...OVERFLOW_OPTIONS[option], label: t(OVERFLOW_OPTIONS[option].label) }));
   return allowedOptions;
 });
 
@@ -322,7 +325,7 @@ const getCurrentUser = computed(() => {
       <Avatar :user="getCurrentUser" class="avatar" />
       <div class="user-info">
         <div class="user-name">
-          {{ getCurrentUser.name }}<span v-if="isImported" class="imported-tag">IMPORTED</span>
+          {{ getCurrentUser.name }}<span v-if="isImported" class="imported-tag">{{ t('IMPORTED') }}</span>
         </div>
         <div class="user-timestamp" v-if="props.comment.createdTime">{{ formatDate(props.comment.createdTime) }}</div>
       </div>
@@ -359,7 +362,7 @@ const getCurrentUser = computed(() => {
         :data-disabled-reason="reopenDisabledReason || null"
         :data-comment-reopen="true"
         :aria-disabled="Boolean(reopenDisabledReason)"
-        title="Reopen comment"
+        :title="t('Reopen comment')"
         v-html="superdocIcons.reopen"
         @click.stop.prevent="handleReopen"
       ></div>

@@ -233,6 +233,9 @@ export function toDisplayString(
 export function toRaw(...args: Parameters<VueRuntime['toRaw']>): ReturnType<VueRuntime['toRaw']> {
   return runtime().toRaw(...args);
 }
+export function toValue(...args: Parameters<VueRuntime['toValue']>): ReturnType<VueRuntime['toValue']> {
+  return runtime().toValue(...args);
+}
 export function toRef(...args: Parameters<VueRuntime['toRef']>): ReturnType<VueRuntime['toRef']> {
   return runtime().toRef(...args);
 }
